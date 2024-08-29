@@ -5,21 +5,15 @@
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
+#include <thread>
 
 #include "TsCommon.h"
-
-#include <SDL.h>
-#include <SDL_image.h>
-#include <SDL_system.h>
-#include <SDL_syswm.h>
-//#include <SDL_thread.h>
 
 static void processMultipleString(unsigned char* ucData, unsigned int usLength,
 	std::vector<MULTIPLE_STRING_TABLE>& multiple_string_table);
 
+unsigned long long getTimeUs();
 
-static bool bSystemRun = true;
-static int g_SessionID = -1;
 class TsParser
 {
 private:
@@ -44,47 +38,24 @@ private:
 	void proccessMpeg2VideoEsUserData(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
 	void proccessMpeg2VideoEsUserDataReorder(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
 	void process_cc_data(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
+	
+	int g_SessionID = -1;
 
-	//SDL : 파싱된 데이터를 실시간으로 플레이하여 확인하기 위한 용도. SDL2버전을 사용하였다.
-#if SDL_USE
-	SDL_Window* window = nullptr;
-	SDL_Renderer* renderer = nullptr;
-	SDL_Texture* texture = nullptr;
-	SDL_Event event;
+	void test();
 
-	unsigned char* pixelData = nullptr;
-
-	bool initializeSDL();
-	void cleanUpSDL();
-	void updateTexture(SDL_Texture* texture, unsigned char* pixelData, int width, int height);
-	void renderFrame();
-
-	//플레이어
-	void avPlayerSDL(unsigned char* data, int size);
-	void AvPlayerProc();
-	static int VideoThread(void* ptr);
-	static int ProcessMPEG2(int State, int TOI, int pos, unsigned long long us, int nReceiveSize, unsigned char* pReceiveBuff, int SessionID, int Width, int Height, void* ptr);
-	void d3d_copy_surface(IDirect3DDevice9* device, IDirect3DSurface9* src, RECT* src_rect, IDirect3DSurface9* dst, RECT* dst_rect);
-	void d3d_present(IDirect3DDevice9* device);
-	void d3d_fill_color(IDirect3DDevice9* device, IDirect3DSurface9* surface, RECT* rect, D3DCOLOR color);
-	void d3d_free_surface(IDirect3DSurface9* surface);
-
-	static void AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned long long decode_time_us, unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2);
-
-	void mainLoop();
-
-	d3d_context* d3d_init(HWND hwnd, int backbuf_width, int backbuf_height);
-	IDirect3DSurface9* d3d_create_surface_from_backbuffer(IDirect3DDevice9* device);
-	IDirect3DSurface9* d3d_create_render_target_surface(IDirect3DDevice9* device, int width, int height, D3DFORMAT format);
-
-	bool g_bForceSwDecoding = false; // DXVA2 사용하지 않는 모드
-#endif
+	std::thread parserThread;
+	void (*g_av_callback)(const char* codec, int TOI, int pos, unsigned long long decode_time_us,
+		unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2)	= nullptr;
 
 public:
 	TsParser(std::string, std::string);
 	~TsParser();
 
+	void startThread(void(*av_callback)(const char* codec, int TOI, int pos, unsigned long long decode_time_us,
+		unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2));
+	void joinThread();
 	void Init();
+
 
 public:
 	//공통 SI정보
@@ -105,7 +76,5 @@ public:
 	std::ofstream esFile;// (output_filename, std::ios::binary);
 	std::ofstream esFileAudio;// (output_filename, std::ios::binary);	
 };
-
-
 #endif
 
