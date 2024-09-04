@@ -1891,13 +1891,19 @@ void TsParser::processAc3AudioEsData(int rf, int serviceId, unsigned long long p
 								fragmented = false;
 								pts -= (1000000 * 1536 / samplerate) * 9 / 100;
 							}
+						#if 1
+							if (g_av_callback) {
+								g_av_callback("ac3", 0, 1, pts * 100 / 9, len, &buf[idx], g_SessionID, buffer_time_us, samplerate, channels);
+							}
 							/*
 							if (g_av_callback)
 								g_av_callback(this, tunerId, rf, serviceId, "ac3", 0, 1,
 									pts * 100 / 9, 0, len, &buf[idx], g_SessionID,
 									buffer_time_us, samplerate, channels, 0, 0, "");
 							*/
+						#else
 							esFileAudio.write(reinterpret_cast<char*>(&buf[idx]), len);	//AC3 파일 저장하여 동작됨 확인( output_audio.ac3 )
+						#endif
 						}
 						pts += (1000000 * 1536 / samplerate) * 9 / 100;
 						idx += len;

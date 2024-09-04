@@ -50,12 +50,18 @@ private:
 	//플레이어
 	void avPlayerSDL(unsigned char* data, int size);
 	void AvPlayerProc();
+	
 	static int VideoThread(void* ptr);
+	static int AudioThread(void* ptr);
+	static int ProcessAAC(int State = 0, int Pos = 0, unsigned long long us = 0, int nReceiveSize = 0, unsigned char* pReceiveBuff = 0, int SessionID = -1, int SampleRate = 0, int AudioNumberOfChannels = 0);
+	static int ProcessAC3(int State = 0, int Pos = 0, unsigned long long us = 0, int nReceiveSize = 0, unsigned char* pReceiveBuff = 0, int SessionID = -1, int SampleRate = 0, int AudioNumberOfChannels = 0);
+
 	static int ProcessMPEG2(int State, int TOI, int pos, unsigned long long us, int nReceiveSize, unsigned char* pReceiveBuff, int SessionID, int Width, int Height, void* ptr);
 	void d3d_copy_surface(IDirect3DDevice9* device, IDirect3DSurface9* src, RECT* src_rect, IDirect3DSurface9* dst, RECT* dst_rect);
 	void d3d_present(IDirect3DDevice9* device);
 	void d3d_fill_color(IDirect3DDevice9* device, IDirect3DSurface9* surface, RECT* rect, D3DCOLOR color);
 	void d3d_free_surface(IDirect3DSurface9* surface);
+	static void audio_callback(void* userdata, Uint8* stream, int len);
 
 	static void AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned long long decode_time_us, unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2);
 
@@ -218,7 +224,7 @@ public:
 	}
 };
 
-#define PICTURE_FRAME_COUNT 1000//240
+#define PICTURE_FRAME_COUNT 240
 class FrameQueue
 {
 private:
@@ -336,6 +342,112 @@ public:
 	int GetTail()
 	{
 		return tail;
+	}
+};
+
+#define BYTE_QUEUE_LENGTH (1024*1024)
+class sAUDIO_LR
+{
+public:
+	unsigned int l;
+	unsigned int r;
+};
+
+class ByteQueue
+{
+private:
+	sAUDIO_LR m_data[BYTE_QUEUE_LENGTH];
+	unsigned long long m_us[BYTE_QUEUE_LENGTH];
+	int m_SessionID[BYTE_QUEUE_LENGTH];
+	int head;
+	int tail;
+public:
+	ByteQueue()
+	{
+		memset(m_data, 0, BYTE_QUEUE_LENGTH * sizeof(sAUDIO_LR));
+		head = 0;
+		tail = 0;
+	}
+	bool push(unsigned int lvalue, unsigned int rValue, unsigned long long us, int SessionID)
+	{
+		bool ret = true;
+
+		int next_head = head + 1;
+		if (BYTE_QUEUE_LENGTH <= next_head)
+		{
+			next_head = 0;
+		}
+		if (next_head == tail)
+		{
+			ret = false;
+
+			printf("Byte Queue Full\n");
+		}
+		else
+		{
+			m_data[head].l = lvalue;
+			m_data[head].r = rValue;
+			m_us[head] = us;
+			m_SessionID[head] = SessionID;
+			head = next_head;
+		}
+
+		return ret;
+	}
+	bool pop(sAUDIO_LR* data, unsigned long long* us, int* SessionID) // 데이터가 없어도 0으로 반환
+	{
+		bool ret = true;
+
+		if (tail == head)
+		{
+			ret = false;
+		}
+		else
+		{
+			*data = m_data[tail];
+			*us = m_us[tail];
+			*SessionID = m_SessionID[tail];
+			int next_tail = tail + 1;
+			if (BYTE_QUEUE_LENGTH <= next_tail)
+			{
+				next_tail = 0;
+			}
+			tail = next_tail;
+		}
+
+		return ret;
+	}
+	int GetCountPercent()
+	{
+		int nCount = (tail <= head) ? (head - tail) : (SIMPLE_QUEUE_LENGTH + head - tail);
+
+		return nCount * 100 / SIMPLE_QUEUE_LENGTH;
+	}
+	int GetHead()
+	{
+		return head;
+	}
+	int GetTail()
+	{
+		return tail;
+	}
+	unsigned long long getTime_us()
+	{
+		unsigned long long ret;
+
+		if (tail == head)
+		{
+			ret = 0;
+		}
+		else
+		{
+			ret = m_us[tail];
+		}
+		return ret;
+	}
+	int getSessionID()
+	{
+		return (tail == head) ? -1 : m_SessionID[tail];
 	}
 };
 #pragma warning(pop)

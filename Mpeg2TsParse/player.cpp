@@ -6,17 +6,19 @@ SimpleQueue* g_videoQueue = 0;
 SimpleQueue* g_audioQueue = 0;
 FrameQueue* g_FrameQueue = 0;
 d3d_context* g_d3d_ctx = NULL;
+ByteQueue* g_playaudioQueue = 0;
 
 static bool bSystemRun = true;
 static int g_SessionID = -1;
 
+static unsigned long long g_AudioPlayTime_us = 0;
+static unsigned long long g_AudioPlayTime_us_Tick = 0;
+
+static bool g_AudioMute = false;
+static bool g_bAudioStarted = false;
+
 Player::Player() {
 	std::cout << "Class Player Constrator()" << std::endl;
-
-
-#if SDL_USE
-
-#endif
 }
 
 Player::~Player() {
@@ -184,6 +186,480 @@ int Player::VideoThread(void* ptr) {
 	return 0;
 }
 
+int Player::AudioThread(void* ptr)
+{
+	SDL_Delay(100);
+	printf("AudioThread Start\n");
+	unsigned char* pReceiveBuff = 0;
+	bool bNoWait = false;
+	while (bSystemRun)
+	{
+		if (bNoWait == false) SDL_Delay(1);
+		char Codec[6];
+		int TOI = 0;
+		int pos = 0;
+		unsigned long long us = 0;
+		int nReceiveSize = 0;
+		if (pReceiveBuff) free(pReceiveBuff);
+		pReceiveBuff = 0;
+		int SessionID = -1;
+		int SampleRate = 0;
+		int AudioNumberOfChannels = 0;
+		pReceiveBuff = g_audioQueue->pop(Codec, &TOI, &pos, &us, &nReceiveSize, &SessionID, &SampleRate, &AudioNumberOfChannels);
+		if (nReceiveSize == 0)
+		{
+			bNoWait = false;
+			continue;
+		}
+		if (SessionID != g_SessionID)
+		{
+			ProcessAAC();
+			ProcessAC3();		
+			SDL_CloseAudio();
+
+			g_bAudioStarted = false;
+			//printf("REMOVE PREV CHANNEL AUDIO QUEUE\n");
+			bNoWait = true;
+			continue;
+		}
+		bNoWait = false;
+		//if (strcmp(Codec, "mp2") == 0) // AC3
+		//{			
+		//	ProcessAAC();
+		//	ProcessAC3();		
+		//}
+		if (strcmp(Codec, "aac") == 0) // AAC
+		{			
+			ProcessAC3();
+			ProcessAAC(1, pos, us, nReceiveSize, pReceiveBuff, SessionID, SampleRate, AudioNumberOfChannels);
+		}
+		if (strcmp(Codec, "ac3") == 0) // AC3
+		{
+			ProcessAAC();
+			ProcessAC3(1, pos, us, nReceiveSize, pReceiveBuff, SessionID, SampleRate, AudioNumberOfChannels);
+		}
+		//if (strcmp(Codec, "mpegh") == 0) // MPEGH
+		//{
+		//	ProcessAAC();
+		//	ProcessAC3();
+		//
+		//}
+		if (strcmp(Codec, "reset") == 0) // CHANNEL CHANGE CODEC RESET
+		{
+			ProcessAAC();
+			ProcessAC3();			
+			SDL_CloseAudio();
+
+			g_bAudioStarted = false;
+		}
+	} // while
+	if (pReceiveBuff) free(pReceiveBuff);
+	printf("AudioThread end\n");
+	ProcessAAC();
+	ProcessAC3();
+#if PCM_TO_WAV_MODE
+	g_wave.Close();
+#endif
+	SDL_CloseAudio();
+	return 0;
+}
+
+// STATE 0 INACTIVE STATE 1 ACTIVE
+int Player::ProcessAAC(int State, int Pos, unsigned long long us, int nReceiveSize, unsigned char* pReceiveBuff, int SessionID, int SampleRate, int AudioNumberOfChannels)
+{
+	static AVFrame* pFrame = 0;
+	static AVCodecContext* codecCtx = 0;
+	static AVCodec* codec = 0;
+	if (State == 0)
+	{
+		if (codecCtx) avcodec_close(codecCtx);
+		codecCtx = 0;
+		codec = 0;
+		if (pFrame) av_frame_free(&pFrame);
+		pFrame = 0;
+		return 0;
+	}
+	if (codec == 0) codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
+	if (codec == 0)
+	{
+		printf("AV_CODEC_ID_AAC not supported\n");
+		return -1;
+	}
+	if (codecCtx == 0)
+	{
+		codecCtx = avcodec_alloc_context3(codec);
+		if (codecCtx == 0)
+		{
+			printf("codecCtx null\n");
+			return -3;
+		}
+		//S_AT3MW_AUDIO_INFO info;
+		//AT3MW_GetAudioInfo(&info);
+		codecCtx->sample_rate = SampleRate; // info.ulsampleRate;
+		codecCtx->channels = AudioNumberOfChannels; // info.ulch;
+		int err = avcodec_open2(codecCtx, codec, NULL);
+		if (err != 0)
+		{
+			printf("avcodec_open2 err null\n");
+			return -2;
+		}
+	}
+	if (codecCtx == 0)
+	{
+		printf("codecCtx null\n");
+		return -3;
+	}
+	AVPacket packet;
+	av_init_packet(&packet);
+	packet.data = pReceiveBuff;
+	packet.size = nReceiveSize;
+	if (pFrame == 0) pFrame = av_frame_alloc();
+	int ret = avcodec_send_packet(codecCtx, &packet);
+	if (ret < 0)
+	{
+		printf("avcodec_send_packet %d\n", ret);
+		ProcessAAC();
+		return -4;
+	}
+	ret = avcodec_receive_frame(codecCtx, pFrame);
+	if (ret < 0)
+	{
+		printf("avcodec_receive_frame=%d\n", ret);
+		ProcessAAC();
+		return -5;
+	}
+	int data_size = av_samples_get_buffer_size(NULL, codecCtx->channels, pFrame->nb_samples, codecCtx->sample_fmt, 1);
+	if (codecCtx->sample_fmt != AV_SAMPLE_FMT_FLTP)
+	{
+		printf("Unsupported codecCtx->sample_fmt=%d\n", codecCtx->sample_fmt);
+		ProcessAAC();
+		return -6;
+	}
+	unsigned int* p32l = (unsigned int*)pFrame->data[0];
+	unsigned int* p32r = (unsigned int*)pFrame->data[1];
+	for (int i = 0; i < pFrame->nb_samples; i++)
+	{
+		unsigned long long play_us = us + ((1000000 * i) / codecCtx->sample_rate);
+		g_playaudioQueue->push(p32l[i], p32r[i], play_us, SessionID);
+	}
+	//printf("ProcessAAC\n");
+	if (g_bAudioStarted == true) return 0;
+	SDL_CloseAudio();
+	SDL_AudioSpec   wanted_spec, spec;
+	wanted_spec.freq = codecCtx->sample_rate;
+	wanted_spec.format = AUDIO_F32SYS;
+	wanted_spec.channels = codecCtx->channels;
+	wanted_spec.silence = 0;
+	wanted_spec.samples = pFrame->nb_samples;
+	wanted_spec.callback = audio_callback;
+	wanted_spec.userdata = codecCtx;
+	if (SDL_OpenAudio(&wanted_spec, &spec) < 0)
+	{
+		printf("SDL_OpenAudio: %s\n", SDL_GetError());
+		return -7;
+	}
+	SDL_PauseAudio(0);
+	g_bAudioStarted = true;
+	return 0;
+}
+
+int Player::ProcessAC3(int State, int Pos, unsigned long long us, int nReceiveSize, unsigned char* pReceiveBuff, int SessionID, int SampleRate, int AudioNumberOfChannels)
+{
+	static unsigned int prev_SampleRate = 0, prev_AudioNumberOfChannels = 0;
+	static uint8_t** pNewFrame = 0;
+	static struct SwrContext* swrCtx = 0;
+	static AVFrame* pFrame = 0;
+	static AVCodecContext* codecCtx = 0;
+	static AVCodec* codec = 0;
+	if (State == 0)
+	{
+		prev_SampleRate = 0;
+		prev_AudioNumberOfChannels = 0;
+		if (swrCtx) swr_free(&swrCtx);
+		swrCtx = 0;
+		if (pNewFrame) av_freep(&pNewFrame[0]);
+		av_freep(&pNewFrame);
+		pNewFrame = 0;
+		if (codecCtx) avcodec_close(codecCtx);
+		codecCtx = 0;
+		codec = 0;
+		if (pFrame) av_frame_free(&pFrame);
+		pFrame = 0;
+		return 0;
+	}
+	if (prev_SampleRate != SampleRate || prev_AudioNumberOfChannels != AudioNumberOfChannels)
+	{
+		//printf("Samplerate or number of channels changed(%d->%d, %d->%d)\n", prev_SampleRate, SampleRate, prev_AudioNumberOfChannels, AudioNumberOfChannels);
+		ProcessAC3();
+
+		prev_SampleRate = SampleRate;
+		prev_AudioNumberOfChannels = AudioNumberOfChannels;
+	}
+	if (codec == 0) codec = avcodec_find_decoder(AV_CODEC_ID_AC3);
+	if (codec == 0)
+	{
+		printf("AV_CODEC_ID_AC3 not supported\n");
+		return -1;
+	}
+	if (codecCtx == 0)
+	{
+		codecCtx = avcodec_alloc_context3(codec);
+		if (codecCtx == 0)
+		{
+			printf("codecCtx null\n");
+			return -3;
+		}
+		//S_AT3MW_AUDIO_INFO info;
+		//AT3MW_GetAudioInfo(&info);
+		codecCtx->sample_rate = SampleRate; // info.ulsampleRate;
+		codecCtx->channels = AudioNumberOfChannels; // info.ulch;
+		int err = avcodec_open2(codecCtx, codec, NULL);
+		if (err != 0)
+		{
+			printf("avcodec_open2 err null\n");
+			return -2;
+		}
+	}
+	if (codecCtx == 0)
+	{
+		printf("codecCtx null\n");
+		return -3;
+	}
+	if (swrCtx == 0)
+	{
+		swrCtx = swr_alloc_set_opts(swrCtx, av_get_default_channel_layout(2), codecCtx->sample_fmt, codecCtx->sample_rate,
+			av_get_default_channel_layout(codecCtx->channels), codecCtx->sample_fmt, codecCtx->sample_rate, 0, NULL);
+		if (swrCtx == 0)
+		{
+			printf("swrCtx null\n");
+			return -3;
+		}
+		swr_init(swrCtx);
+	}
+	if (swrCtx == 0)
+	{
+		printf("swrCtx null\n");
+		return -3;
+	}
+	AVPacket packet;
+	av_init_packet(&packet);
+	packet.data = pReceiveBuff;
+	packet.size = nReceiveSize;
+	if (pFrame == 0) pFrame = av_frame_alloc();
+	int ret = avcodec_send_packet(codecCtx, &packet);
+	if (ret < 0)
+	{
+		printf("avcodec_send_packet %d\n", ret);
+		ProcessAC3();
+		return -4;
+	}
+	ret = avcodec_receive_frame(codecCtx, pFrame);
+	if (ret < 0)
+	{
+		printf("avcodec_receive_frame=%d\n", ret);
+		ProcessAC3();
+		return -5;
+	}
+	int data_size = av_samples_get_buffer_size(NULL, codecCtx->channels, pFrame->nb_samples, codecCtx->sample_fmt, 1);
+	if (codecCtx->sample_fmt != AV_SAMPLE_FMT_FLTP)
+	{
+		printf("Unsupported codecCtx->sample_fmt=%d\n", codecCtx->sample_fmt);
+		ProcessAC3();
+		return -6;
+	}
+	if (pNewFrame == 0)
+	{
+		ret = av_samples_alloc_array_and_samples(&pNewFrame, NULL, 2, pFrame->nb_samples, codecCtx->sample_fmt, 0);
+		if (ret < 0)
+		{
+			printf("av_samples_alloc_array_and_samples=%d\n", ret);
+			ProcessAC3();
+			return -6;
+		}
+	}
+	int converted = swr_convert(swrCtx, pNewFrame, pFrame->nb_samples, (const uint8_t**)&pFrame->data, pFrame->nb_samples);
+	if (converted == 0) return 0;
+	unsigned int* p32l = (unsigned int*)pNewFrame[0];
+	unsigned int* p32r = (unsigned int*)pNewFrame[1];
+	static unsigned long long prev_us = 0, new_us = 0;
+	if (us == prev_us)
+	{
+		new_us += 1000000 * pFrame->nb_samples / codecCtx->sample_rate;
+	}
+	else
+	{
+		prev_us = new_us = us;
+	}
+	for (int i = 0; i < pFrame->nb_samples; i++)
+	{
+
+		unsigned long long play_us = new_us + ((1000000 * i) / codecCtx->sample_rate);
+		g_playaudioQueue->push(p32l[i], p32r[i], play_us, SessionID);
+	}
+	// printf("ProcessAC3\n");
+	if (g_bAudioStarted == true) return 0;
+	SDL_CloseAudio();
+	SDL_AudioSpec   wanted_spec, spec;
+	wanted_spec.freq = codecCtx->sample_rate;
+	wanted_spec.format = AUDIO_F32SYS;
+	wanted_spec.channels = 2;
+	wanted_spec.silence = 0;
+	wanted_spec.samples = pFrame->nb_samples;
+	wanted_spec.callback = audio_callback;
+	wanted_spec.userdata = codecCtx;
+	if (SDL_OpenAudio(&wanted_spec, &spec) < 0)
+	{
+		printf("SDL_OpenAudio: %s\n", SDL_GetError());
+		return -7;
+	}
+	SDL_PauseAudio(0);
+	g_bAudioStarted = true;
+	return 0;
+}
+
+void Player::audio_callback(void* userdata, Uint8* stream, int len)
+{
+	unsigned char* p8 = (unsigned char*)malloc(len);
+	memset(p8, 0, len);
+	if (p8 == 0)
+	{
+		return;
+	}
+	unsigned int* p32 = (unsigned int*)p8;
+	int nSamples = len / 8;
+	unsigned long long us = 0;
+	//printf("len = %d\n", len);
+#if 1
+	sAUDIO_LR lr;
+	lr.l = 0;
+	lr.r = 0;
+
+	while (1)
+	{
+		int SessionID = g_playaudioQueue->getSessionID();
+		if (SessionID == -1) break;
+		if (g_playaudioQueue->getSessionID() == g_SessionID) break;
+		g_playaudioQueue->pop(&lr, &us, &SessionID);
+		//printf("REMOVE PREV CHANNEL AUDIO\n");
+	}
+
+	us = g_playaudioQueue->getTime_us();
+
+	unsigned long long currPacketTime = us;
+	unsigned long long currSystemTime = getTimeUs();
+
+	if (0)
+	{
+		if (currSystemTime <= currPacketTime)
+		{
+			printf("|adec| s:%llu, p:%llu d:<%llu\n", currSystemTime, currPacketTime, currPacketTime - currSystemTime);
+		}
+		else
+		{
+			printf("|adec| s:%llu, p:%llu d:>%llu\n", currSystemTime, currPacketTime, currSystemTime - currPacketTime);
+		}
+	}
+
+	static bool isPlay = false;
+	if (isPlay == false)
+	{
+		if (currSystemTime <= currPacketTime)
+		{
+			unsigned long long delayTime = currPacketTime - currSystemTime;
+			if (delayTime < (5 * 1000 * 1000))
+			{
+				memset(stream, 0, len);
+				free(p8);
+				//printf("AUDIO WAIT 1\n");
+				return;
+			}
+			else
+			{
+				//printf("AUDIO DROP 1\n");
+				while (1)
+				{
+					int SessionID = -1;
+					bool ret = g_playaudioQueue->pop(&lr, &us, &SessionID);
+					if (ret == false)
+					{
+						memset(stream, 0, len);
+						free(p8);
+						return;
+					}
+					if (us < currSystemTime)
+					{
+						break;
+					}
+				}
+				isPlay = true;
+			}
+		}
+		else
+		{
+			isPlay = true;
+		}
+	}
+	else
+	{
+		if (currSystemTime <= currPacketTime)
+		{
+			unsigned long long delayTime = currPacketTime - currSystemTime;
+			if ((100 * 1000) < delayTime)
+			{
+				isPlay = false;
+				memset(stream, 0, len);
+				free(p8);
+				//printf("AUDIO WAIT 2\n");
+				return;
+			}
+		}
+		else
+		{
+			unsigned long long delayTime = currSystemTime - currPacketTime;
+			if ((100 * 1000) < delayTime)
+			{
+				//printf("AUDIO DROP 2\n");
+				while (1)
+				{
+					int SessionID = -1;
+					bool ret = g_playaudioQueue->pop(&lr, &us, &SessionID);
+					if (ret == false)
+					{
+						memset(stream, 0, len);
+						free(p8);
+						return;
+					}
+					if (currSystemTime <= us)
+					{
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < nSamples; i++)
+	{
+		int SessionID = -1;
+		if (g_playaudioQueue->pop(&lr, &us, &SessionID) == false)
+		{
+			memset(stream, 0, len);
+			free(p8);
+			return;
+		}
+
+		p32[i * 2] = lr.l;
+		p32[i * 2 + 1] = lr.r;
+		g_AudioPlayTime_us = us;
+		g_AudioPlayTime_us_Tick = getTimeUs();
+	}
+#endif
+
+	if (g_AudioMute) memset(p8, 0, len);
+	memcpy(stream, p8, len);
+	free(p8);
+}
+
 int Player::ProcessMPEG2(int State = 0, int TOI = 0, int pos = 0, unsigned long long us = 0, int nReceiveSize = 0, unsigned char* pReceiveBuff = 0, int SessionID = -1, int Width = 0, int Height = 0, void* ptr = NULL)
 {
 	static AVFrame* pFrame = 0;
@@ -310,7 +786,7 @@ int Player::ProcessMPEG2(int State = 0, int TOI = 0, int pos = 0, unsigned long 
 	{
 		prev_us = psudo_us = us;
 	}
-
+	 
 	//printf("nScreenWidth=%d nScreenHeight=%d\n", SCREEN_WIDTH, SCREEN_HEIGHT);
 	int nTargetBufferSize = pFrame->width * pFrame->height;
 	AVPicture pict;
@@ -429,8 +905,10 @@ void Player::mainLoop() {
 	g_videoQueue = new SimpleQueue;
 	g_FrameQueue = new FrameQueue;
 	g_audioQueue = new SimpleQueue;
+	g_playaudioQueue = new ByteQueue;
 
 	SDL_Thread* pVideoThread = SDL_CreateThread(VideoThread, "VideoThread", (void*)videoSurface);
+	SDL_Thread* pAudioThread = SDL_CreateThread(AudioThread, "AudioThread", 0);
 
 	//MW 코드 실행 ( CB등록 및 실행 )
 	std::string sourcePath = "C:\\Work\\STREAM\\ts\\test2.ts";
@@ -890,7 +1368,8 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 	if (strcmp(codec, "reset") == 0)
 	{
 		g_SessionID = SessionID;
-		//g_audioQueue->push(codec, 0, 0, 0, (unsigned int)strlen(codec), (unsigned char*)codec, SessionID, 0, 0); // Simple Queue의 reset 함수에서 초기화하기 위해서는 더미 데이터가 필요하다.
+		
+		g_audioQueue->push(codec, 0, 0, 0, (unsigned int)strlen(codec), (unsigned char*)codec, SessionID, 0, 0); // Simple Queue의 reset 함수에서 초기화하기 위해서는 더미 데이터가 필요하다.
 		g_videoQueue->push(codec, 0, 0, 0, (unsigned int)strlen(codec), (unsigned char*)codec, SessionID, 0, 0); // Simple Queue의 reset 함수에서 초기화하기 위해서는 더미 데이터가 필요하다.
 	}
 	if (strcmp(codec, "aac") == 0 || strcmp(codec, "ac3") == 0 || strcmp(codec, "mpegh") == 0 || strcmp(codec, "mp2") == 0)
@@ -898,7 +1377,7 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 		if (first_decode_time_us)
 		{
 			unsigned long long new_decode_time_us = decode_time_us - first_decode_time_us + first_system_time_us;
-			//g_audioQueue->push(codec, TOI, pos, new_decode_time_us + offset_time_us, data_length, data, SessionID, param1, param2);
+			g_audioQueue->push(codec, TOI, pos, new_decode_time_us + offset_time_us, data_length, data, SessionID, param1, param2);
 			//printf("|mpegh| %llu, %llu\n", decode_time_us, new_decode_time_us + offset_time_us);
 		}
 	}
