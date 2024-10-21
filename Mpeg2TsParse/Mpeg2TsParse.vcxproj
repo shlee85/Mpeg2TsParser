@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{074755f7-7b0b-48d6-a682-7d6f29d293f1}</ProjectGuid>
+    <RootNamespace>Mpeg2TsParse</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="CBitBuffer.cpp" />
+    <ClCompile Include="CByteBuffer.cpp" />
+    <ClCompile Include="CNodes.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="player.cpp" />
+    <ClCompile Include="TsCommon.h" />
+    <ClCompile Include="TsParser.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CBitBuffer.h" />
+    <ClInclude Include="CByteBuffer.h" />
+    <ClInclude Include="CNodes.h" />
+    <ClInclude Include="player.h" />
+    <ClInclude Include="TsParser.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\sdl2.redist.2.0.5\build\native\sdl2.redist.targets" Condition="Exists('..\packages\sdl2.redist.2.0.5\build\native\sdl2.redist.targets')" />
+    <Import Project="..\packages\sdl2.2.0.5\build\native\sdl2.targets" Condition="Exists('..\packages\sdl2.2.0.5\build\native\sdl2.targets')" />
+    <Import Project="..\packages\sdl2.v140.redist.2.0.4\build\native\sdl2.v140.redist.targets" Condition="Exists('..\packages\sdl2.v140.redist.2.0.4\build\native\sdl2.v140.redist.targets')" />
+    <Import Project="..\packages\sdl2.v140.2.0.4\build\native\sdl2.v140.targets" Condition="Exists('..\packages\sdl2.v140.2.0.4\build\native\sdl2.v140.targets')" />
+    <Import Project="..\packages\libjpeg.redist.9.0.1.4\build\native\libjpeg.redist.targets" Condition="Exists('..\packages\libjpeg.redist.9.0.1.4\build\native\libjpeg.redist.targets')" />
+    <Import Project="..\packages\libpng.redist.1.6.19.1\build\native\libpng.redist.targets" Condition="Exists('..\packages\libpng.redist.1.6.19.1\build\native\libpng.redist.targets')" />
+    <Import Project="..\packages\libtiff.redist.4.0.6.2\build\native\libtiff.redist.targets" Condition="Exists('..\packages\libtiff.redist.4.0.6.2\build\native\libtiff.redist.targets')" />
+    <Import Project="..\packages\libwebp.v140.redist.0.5.0.1\build\native\libwebp.v140.redist.targets" Condition="Exists('..\packages\libwebp.v140.redist.0.5.0.1\build\native\libwebp.v140.redist.targets')" />
+    <Import Project="..\packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets" Condition="Exists('..\packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets')" />
+    <Import Project="..\packages\sdl2_image.v140.redist.2.0.1\build\native\sdl2_image.v140.redist.targets" Condition="Exists('..\packages\sdl2_image.v140.redist.2.0.1\build\native\sdl2_image.v140.redist.targets')" />
+    <Import Project="..\packages\sdl2_image.v140.2.0.1\build\native\sdl2_image.v140.targets" Condition="Exists('..\packages\sdl2_image.v140.2.0.1\build\native\sdl2_image.v140.targets')" />
+    <Import Project="..\packages\FFmpeg.Nightly.20200831.1.0\build\native\FFmpeg.Nightly.targets" Condition="Exists('..\packages\FFmpeg.Nightly.20200831.1.0\build\native\FFmpeg.Nightly.targets')" />
+    <Import Project="..\packages\zlib-vc140-static-64.1.2.11\build\native\zlib-vc140-static-64.targets" Condition="Exists('..\packages\zlib-vc140-static-64.1.2.11\build\native\zlib-vc140-static-64.targets')" />
+    <Import Project="..\packages\Universal.OpenSSL.1.0.2.1\build\native\Universal.OpenSSL.targets" Condition="Exists('..\packages\Universal.OpenSSL.1.0.2.1\build\native\Universal.OpenSSL.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>이 프로젝트는 이 컴퓨터에 없는 NuGet 패키지를 참조합니다. 해당 패키지를 다운로드하려면 NuGet 패키지 복원을 사용하십시오. 자세한 내용은 http://go.microsoft.com/fwlink/?LinkID=322105를 참조하십시오. 누락된 파일은 {0}입니다.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\sdl2.redist.2.0.5\build\native\sdl2.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\sdl2.redist.2.0.5\build\native\sdl2.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\sdl2.2.0.5\build\native\sdl2.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\sdl2.2.0.5\build\native\sdl2.targets'))" />
+    <Error Condition="!Exists('..\packages\sdl2.v140.redist.2.0.4\build\native\sdl2.v140.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\sdl2.v140.redist.2.0.4\build\native\sdl2.v140.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\sdl2.v140.2.0.4\build\native\sdl2.v140.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\sdl2.v140.2.0.4\build\native\sdl2.v140.targets'))" />
+    <Error Condition="!Exists('..\packages\libjpeg.redist.9.0.1.4\build\native\libjpeg.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\libjpeg.redist.9.0.1.4\build\native\libjpeg.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\libpng.redist.1.6.19.1\build\native\libpng.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\libpng.redist.1.6.19.1\build\native\libpng.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\libtiff.redist.4.0.6.2\build\native\libtiff.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\libtiff.redist.4.0.6.2\build\native\libtiff.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\libwebp.v140.redist.0.5.0.1\build\native\libwebp.v140.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\libwebp.v140.redist.0.5.0.1\build\native\libwebp.v140.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets'))" />
+    <Error Condition="!Exists('..\packages\sdl2_image.v140.redist.2.0.1\build\native\sdl2_image.v140.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\sdl2_image.v140.redist.2.0.1\build\native\sdl2_image.v140.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\sdl2_image.v140.2.0.1\build\native\sdl2_image.v140.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\sdl2_image.v140.2.0.1\build\native\sdl2_image.v140.targets'))" />
+    <Error Condition="!Exists('..\packages\FFmpeg.Nightly.20200831.1.0\build\native\FFmpeg.Nightly.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\FFmpeg.Nightly.20200831.1.0\build\native\FFmpeg.Nightly.targets'))" />
+    <Error Condition="!Exists('..\packages\zlib-vc140-static-64.1.2.11\build\native\zlib-vc140-static-64.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\zlib-vc140-static-64.1.2.11\build\native\zlib-vc140-static-64.targets'))" />
+    <Error Condition="!Exists('..\packages\Universal.OpenSSL.1.0.2.1\build\native\Universal.OpenSSL.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Universal.OpenSSL.1.0.2.1\build\native\Universal.OpenSSL.targets'))" />
+  </Target>
+</Project>
