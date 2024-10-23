@@ -2,6 +2,7 @@
 #include "TsCommon.h"
 #include "CByteBuffer.h"
 #include "CBitBuffer.h"
+#include "HvccParser.h"
 
 #include <thread>  // std::this_thread::sleep_for
 #include <chrono>  // std::chrono::seconds
@@ -37,6 +38,7 @@ TsParser::TsParser(std::string source, std::string output) : source_path(source.
 	esFile.open(output_video, std::ios::binary);
 	esFileAudio.open(output_audio, std::ios::binary);
 
+	hvccParser = new HvCCParser();
 }
 
 TsParser::~TsParser() {
@@ -87,7 +89,7 @@ void TsParser::Init() {
 	PCR_TABLE pcr_table;
 
 	unsigned int rf = 63000000;
-	unsigned int serviceId = 2;
+	unsigned int serviceId = 256;	//입력 pid값 파싱할 때 굉장히 중요함.
 
 	for (PID_TABLE& table : m_vec_pid_table) {
 		delete table.nodes;
@@ -112,7 +114,7 @@ void TsParser::Init() {
 	m_vec_pid_table.push_back(pid_table);
 
 	while (!feof(tsFile)) {
-		size_t readTs = fread(&buffer, 1, 188, tsFile);		
+		size_t readTs = fread(&buffer, 1, 188, tsFile);
 		//std::cout << "readTs : " << readTs << std::endl;
 		//std::cout << "bufferSize = " << buffer.length() << std::endl;
 
@@ -208,7 +210,7 @@ void TsParser::Init() {
 				continue;
 			if (serviceId != table.program_number)
 				continue;
-			if (table.stream_type != TS_VIDEO_TYPE_MPEG2)
+			if (table.stream_type != TS_VIDEO_TYPE_MPEG2 && table.stream_type != TS_VIDEO_TYPE_H264)
 				continue;
 			unsigned short elementary_pid = table.elementary_pid;
 			bool bFind = false;
@@ -236,7 +238,7 @@ void TsParser::Init() {
 				PES_TABLE pes_table;
 				pes_table.rf = rf;
 				pes_table.pid = elementary_pid;
-				pes_table.type = (table.stream_type == TS_VIDEO_TYPE_MPEG2) ? PES_TYPE_MPEG2_VIDEO : PES_TYPE_MPEG2_VIDEO;	//기존에 h265인데 지원하지 않으므로 무조건 mpeg2로 일단 처리.
+				pes_table.type = (table.stream_type == TS_VIDEO_TYPE_MPEG2) ? PES_TYPE_MPEG2_VIDEO : PES_TYPE_H264_VIDEO;	//MPEG2가 아니면 H264로 처리 한다.
 				m_vec_pes_table.push_back(pes_table);
 
 				PID_TABLE pid_table;
@@ -295,7 +297,7 @@ void TsParser::Init() {
 					if (rf != v2[i - 1].rf)
 						continue;
 					if (PES_TYPE_AC3_AUDIO == v2[i - 1].type ||
-						PES_TYPE_EAC3_AUDIO == v2[i - 1].type ||
+						PES_TYPE_BSAC_AUDIO == v2[i - 1].type ||
 						PES_TYPE_AAC_AUDIO == v2[i - 1].type) {
 						auto& vv = m_vec_pid_table;
 						for (size_t j = vv.size(); 0 < j; j--) {
@@ -318,8 +320,8 @@ void TsParser::Init() {
 				PES_TABLE pes_table;
 				pes_table.rf = rf;
 				pes_table.pid = elementary_pid;
-				pes_table.type = (table.stream_type == TS_AUDIO_TYPE_AC3) ? PES_TYPE_AC3_AUDIO :
-					(table.stream_type == TS_AUDIO_TYPE_EAC3) ? PES_TYPE_EAC3_AUDIO : PES_TYPE_AAC_AUDIO;
+				pes_table.type = (table.stream_type == TS_AUDIO_TYPE_AC3) ? PES_TYPE_AC3_AUDIO : PES_TYPE_BSAC_AUDIO;
+					//(table.stream_type == TS_AUDIO_TYPE_EAC3) ? PES_TYPE_EAC3_AUDIO : PES_TYPE_AAC_AUDIO;
 				m_vec_pes_table.push_back(pes_table);
 
 				PID_TABLE pid_table;
@@ -434,7 +436,7 @@ void TsParser::Init() {
 				std::cout << "Not TS sync = 0x" << sync_byte << std::endl;
 				continue;
 			}
-			unsigned short b = bb.get2();
+			unsigned short b = bb.get2();	//2바이트 이동
 
 			unsigned char transport_error_indicator = (b >> 15) & 0x0001;
 			if (transport_error_indicator) {
@@ -495,7 +497,7 @@ void TsParser::Init() {
 				for (PID_TABLE& table : m_vec_pid_table) {
 					//std::cout << "mVecPidTable!" << std::endl;
 					//printf("rf[%d] table.rf[%d] , pid[%d] table.pid[%d]\n", rf, table.rf, pid, table.pid);
-				
+					
 					if (rf == table.rf && pid == table.pid) {
 						if (table.nodes == nullptr) {
 							std::cout << "table nodes is null" << std::endl;
@@ -504,14 +506,15 @@ void TsParser::Init() {
 
 						if (continuity_counter != ((table.continuity_counter + 1) & 0x0f)) {
 							table.payload_unit_start = false;
-
+							
 							table.nodes->reset();
 							for (PES_TABLE& table2 : m_vec_pes_table) {
 								if (rf == table2.rf && pid == table2.pid) {
 									switch (table2.type)
 									{
+									case PES_TYPE_H264_VIDEO:
 									case PES_TYPE_MPEG2_VIDEO:
-										std::cout << "PES_TYPE_MPEG2_VIDEO1" << std::endl;
+										std::cout << "PES_TYPE_MPEG2_VIDEO" << std::endl;
 										nodesVideo->reset();
 										break;
 									case PES_TYPE_AC3_AUDIO:
@@ -585,12 +588,13 @@ void TsParser::Init() {
 			count++;
 		}
 		
+		//SHLEE
 		if (count == 500) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			count = 0;
 		}
 
-		//std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}//while
 }
 #pragma warning(pop)
@@ -798,6 +802,10 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 	for (PES_TABLE& table : m_vec_pes_table) {
 		if (rf == table.rf && pid == table.pid) {
 			switch (table.type) {
+			case PES_TYPE_H264_VIDEO:
+				//std::cout << "PES_TYPE_H264_VIDEO" << std::endl;
+				processH264VideoEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
+				break;
 			case PES_TYPE_MPEG2_VIDEO: {
 				//std::cout << "PES_TYPE_MPEG2_VIDEO" << std::endl;
 				processMpeg2VideoEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
@@ -845,7 +853,7 @@ void TsParser::processSectionData(int rf, int serviceId, unsigned short pid, uns
 		break;
 	}
 
-	case TS_TABLE_ID_PMT: {
+	case TS_TABLE_ID_PMT: {	
 		processPmtData(rf, serviceId, pid, ucData, usLength);
 
 		break;
@@ -1456,7 +1464,7 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 			continue;
 		if (table.program_number != serviceId)
 			continue;
-		if (table.stream_type != TS_AUDIO_TYPE_AAC)
+		if (table.stream_type != TS_AUDIO_TYPE_AAC && table.stream_type != TS_AUDIO_TYPE_BSAC)
 			continue;
 		strXML << "<info demod='8vsb' rf='" << rf << "' sid='" << serviceId << "' lang='"
 			<< iso639((char*)table.language.c_str());
@@ -1472,6 +1480,124 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 	if (nCount > 0) {
 		//dataCallback("ainfo", strXML);
 		std::cout << "dataCallback ainfo = " << strXML.str() << std::endl;
+	}
+}
+
+void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts,
+	unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us) {
+	//abort();	
+#if 0
+	printf("pts %llu\n", pts);
+	static FILE* vfp = NULL;
+	if (!vfp)
+	{
+		fopen_s(&vfp, "video.ts", "wb");
+	}
+
+	if (vfp)
+	{
+		fwrite(ucData, 1, usLength, vfp);
+	}
+#endif
+
+	unsigned char* buf = ucData;
+	unsigned int idx = 0;
+
+	for (; idx < (usLength - 7);) {
+		unsigned int start_code = buf[idx + 0];
+		start_code = (start_code << 8) | buf[idx + 1];
+		start_code = (start_code << 8) | buf[idx + 2];
+		start_code = (start_code << 8) | buf[idx + 3];
+		unsigned char nal_unit_type = (buf[idx + 4] & 0x1f);
+		unsigned char pic_type = (buf[idx + 6] >> 5) & 0x07;
+		if (start_code == 0x00000001 && nal_unit_type == hvccParser->AUD_NUT) {
+			unsigned int len = usLength - idx;
+			//std::cout << "0x00000001" << std::endl;		
+			
+			for (unsigned int next = idx + 7; next < (usLength - 5); next++) {
+				unsigned int next_start_code = buf[next + 0];
+				next_start_code = (next_start_code << 8) | buf[next + 1];
+				next_start_code = (next_start_code << 8) | buf[next + 2];
+				next_start_code = (next_start_code << 8) | buf[next + 3];
+				unsigned char next_nal_unit_type = (buf[next + 4] & 0x1f);
+				if (next_start_code == 0x00000001 && next_nal_unit_type == hvccParser->AUD_NUT) {
+					if (next_nal_unit_type == hvccParser->AUD_NUT) {
+						len = next - idx;
+						break;
+					}
+				}
+			}
+			
+			if ((idx + len) <= usLength) {
+				if (pic_type == 0 || pic_type == 1 || pic_type == 2) {
+					for (unsigned int i = idx + 7; i < (idx + len - 10); i++) {
+						unsigned int start_code2 = buf[i + 0];
+						start_code2 = (start_code2 << 8) | buf[i + 1];
+						start_code2 = (start_code2 << 8) | buf[i + 2];
+						start_code2 = (start_code2 << 8) | buf[i + 3];
+						unsigned char nal_unit_type2 = (buf[i + 4] & 0x1f);
+						//printf("nal_unit_type2 = 0x%x\n", nal_unit_type2);
+						if (start_code2 == 0x00000001 && (nal_unit_type2 == hvccParser->SPS_NUT || nal_unit_type2 == hvccParser->PPS_NUT)) {
+							unsigned int param_len = 0;							
+							printf("start!! nal_unit_type2=0x%x\n", nal_unit_type2);
+							for (unsigned int j = i + 5; j < (idx + len - 5); j++) {
+								unsigned int next_start_code = buf[j + 0];
+								next_start_code = (next_start_code << 8) | buf[j + 1];
+								next_start_code = (next_start_code << 8) | buf[j + 2];
+								next_start_code = (next_start_code << 8) | buf[j + 3];
+								unsigned char next_nal_unit_type = (buf[j + 4] & 0x1f);
+								if (next_start_code == 0x00000001 && !(next_nal_unit_type == hvccParser->SPS_NUT || next_nal_unit_type == hvccParser->PPS_NUT)) {
+									param_len = j - i;
+									break;
+								}
+							}
+
+							if (param_len) {
+								if (g_av_callback) {
+									printf("g_av_callback SPS_NUT or PPS_NUT paramlen=%d\n",param_len);
+									abort();
+									esFile.write(reinterpret_cast<char*>(&buf[idx]), len);
+									g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
+										(dts ? dts : pts) * 100 / 9,
+										len, &buf[idx], g_SessionID, buffer_time_us, 0, 0);
+								}
+
+								break;
+							}
+						}
+					}
+				}
+
+				if (buffer_time_us) {
+					int presentation_time_offset_us = 0;
+					if (dts && dts > pts) {
+						presentation_time_offset_us = (int)(dts - pts) * 100 / 9;
+						presentation_time_offset_us *= -1;
+					}
+					if (dts && dts < pts) {
+						presentation_time_offset_us = (int)(pts - dts) * 100 / 9;
+					}
+
+					if (g_av_callback)
+						if (g_av_callback) {
+							printf("g_av_callback!!!!!\n");
+							esFile.write(reinterpret_cast<char*>(&buf[idx]), len);
+						#if 0
+							g_av_callback("h264", (int)((dts ? dts : pts) / 90000), start_code == 0x00000001 ? 0 : 1,
+								(dts ? dts : pts) * 100 / 9,
+								len, &buf[idx], g_SessionID, buffer_time_us, 0, 0);
+						#endif
+						}
+				}
+				idx += len;
+			}
+			else {
+				break;
+			}
+		}
+		else {
+			idx++;
+		}
 	}
 }
 
@@ -1934,5 +2060,4 @@ void TsParser::processAc3AudioEsData(int rf, int serviceId, unsigned long long p
 	nodesAudio->add(0, nodesTemp->get(0, nodesTemp->len()), nodesTemp->len(), 0);
 	delete nodesTemp;
 }
-
 #pragma warning(pop)

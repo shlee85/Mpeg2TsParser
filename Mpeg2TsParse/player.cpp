@@ -911,7 +911,8 @@ void Player::mainLoop() {
 	SDL_Thread* pAudioThread = SDL_CreateThread(AudioThread, "AudioThread", 0);
 
 	//MW 코드 실행 ( CB등록 및 실행 )
-	std::string sourcePath = "C:\\Work\\STREAM\\ts\\test2.ts";
+	//std::string sourcePath = "C:\\Work\\STREAM\\ts\\test2.ts";	//mpeg2
+	std::string sourcePath = "C:\\Work\\STREAM\\ts\\av_s1.ts";		//h264
 	std::string outputPath = "ouputs/parser.txt";
 	TsParser *ts = new TsParser(sourcePath, outputPath);
 	ts->startThread(AT3APP_AvCallbackSub);
@@ -1324,7 +1325,8 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 	g_SessionID = SessionID;
 
 	static unsigned long long first_video_decode_time_us = 0, first_decode_time_us = 0, first_system_time_us = 0, offset_time_us = 0;
-	if (strcmp(codec, "aac") == 0 || strcmp(codec, "ac3") == 0 || strcmp(codec, "mpegh") == 0 || strcmp(codec, "mp2") == 0 || strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") == 0)
+	if (strcmp(codec, "aac") == 0 || strcmp(codec, "ac3") == 0 || strcmp(codec, "mpegh") == 0 || strcmp(codec, "mp2") == 0 || strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") == 0
+		|| strcmp(codec, "h264"))
 	{
 		if (decode_time_us)
 		{
@@ -1381,7 +1383,7 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 			//printf("|mpegh| %llu, %llu\n", decode_time_us, new_decode_time_us + offset_time_us);
 		}
 	}
-	if (strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") == 0)
+	if (strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") || strcmp(codec, "h264") == 0)
 	{
 		if (first_decode_time_us || pos == 0)
 		{

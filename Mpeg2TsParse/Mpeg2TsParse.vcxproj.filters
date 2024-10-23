@@ -36,6 +36,9 @@
     <ClCompile Include="player.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="HvccParser.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TsParser.h">
@@ -53,8 +56,19 @@
     <ClInclude Include="player.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="HvccParser.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Mpeg2TsParse.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

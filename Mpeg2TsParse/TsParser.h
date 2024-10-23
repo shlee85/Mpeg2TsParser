@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "TsCommon.h"
+#include "HvccParser.h"
 
 static void processMultipleString(unsigned char* ucData, unsigned int usLength,
 	std::vector<MULTIPLE_STRING_TABLE>& multiple_string_table);
@@ -34,6 +35,7 @@ private:
 
 	void processAc3AudioEsData(int rf, int serviceId, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
 	void processAacAudioEsData(int rf, int serviceId, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
+	void processH264VideoEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
 	void processMpeg2VideoEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
 	void proccessMpeg2VideoEsUserData(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
 	void proccessMpeg2VideoEsUserDataReorder(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
@@ -71,10 +73,12 @@ public:
 	CNodes* nodesVideo = nullptr;
 	CNodes* nodesAudio = nullptr;
 
-	const char* output_video = "output_video2.mpg";
+	const char* output_video = "h264_video.mp4";
 	const char* output_audio = "output_audio.ac3";
 	std::ofstream esFile;// (output_filename, std::ios::binary);
-	std::ofstream esFileAudio;// (output_filename, std::ios::binary);	
+	std::ofstream esFileAudio;// (output_filename, std::ios::binary);
+
+	HvCCParser *hvccParser = nullptr;
 };
 #endif
 

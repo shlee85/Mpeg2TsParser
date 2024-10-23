@@ -130,6 +130,7 @@
     <ClCompile Include="CBitBuffer.cpp" />
     <ClCompile Include="CByteBuffer.cpp" />
     <ClCompile Include="CNodes.cpp" />
+    <ClCompile Include="HvccParser.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="player.cpp" />
     <ClCompile Include="TsCommon.h" />
@@ -139,11 +140,16 @@
     <ClInclude Include="CBitBuffer.h" />
     <ClInclude Include="CByteBuffer.h" />
     <ClInclude Include="CNodes.h" />
+    <ClInclude Include="HvccParser.h" />
     <ClInclude Include="player.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="TsParser.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Mpeg2TsParse.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
