@@ -73,7 +73,7 @@ public:
 	CNodes* nodesVideo = nullptr;
 	CNodes* nodesAudio = nullptr;
 
-	const char* output_video = "h264_video.mp4";
+	const char* output_video = "h264_video.es";
 	const char* output_audio = "output_audio.ac3";
 	std::ofstream esFile;// (output_filename, std::ios::binary);
 	std::ofstream esFileAudio;// (output_filename, std::ios::binary);

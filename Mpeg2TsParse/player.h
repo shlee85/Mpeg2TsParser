@@ -57,6 +57,7 @@ private:
 	static int ProcessAC3(int State = 0, int Pos = 0, unsigned long long us = 0, int nReceiveSize = 0, unsigned char* pReceiveBuff = 0, int SessionID = -1, int SampleRate = 0, int AudioNumberOfChannels = 0);
 
 	static int ProcessMPEG2(int State, int TOI, int pos, unsigned long long us, int nReceiveSize, unsigned char* pReceiveBuff, int SessionID, int Width, int Height, void* ptr);
+	static int ProcessH264(int State, int TOI, int pos, unsigned long long us, int nReceiveSize, unsigned char* pReceiveBuff, int SessionID, int Width, int Height, void* ptr);
 	void d3d_copy_surface(IDirect3DDevice9* device, IDirect3DSurface9* src, RECT* src_rect, IDirect3DSurface9* dst, RECT* dst_rect);
 	void d3d_present(IDirect3DDevice9* device);
 	void d3d_fill_color(IDirect3DDevice9* device, IDirect3DSurface9* surface, RECT* rect, D3DCOLOR color);

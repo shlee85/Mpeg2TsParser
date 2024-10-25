@@ -159,6 +159,7 @@ int Player::VideoThread(void* ptr) {
 		}
 		if (SessionID != g_SessionID) // reset to empty hvcc
 		{
+			ProcessH264(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 			ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 
 			bNoWait = true;
@@ -172,9 +173,19 @@ int Player::VideoThread(void* ptr) {
 			std::cout << "codec is mpeg2 in VideoThread" << std::endl;;
 			ProcessMPEG2(1, TOI, pos, us, nReceiveSize, pReceiveBuff, SessionID, width, height, ptr);
 		}
+		else if (strcmp(Codec, "h264") == 0)
+		{
+			std::cout << "codec is h264 in VideoThread" << std::endl;
+			ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
+			//임시
+			//pos = 1;
+
+			ProcessH264(1, TOI, pos, us, nReceiveSize, pReceiveBuff, SessionID, width, height, ptr);
+		}
 		if (strcmp(Codec, "reset") == 0) // CHANNEL CHANGE CODEC RESET
 		{
 			ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
+			ProcessH264(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 		}
 
 	} // while
@@ -182,6 +193,7 @@ int Player::VideoThread(void* ptr) {
 	if (pReceiveBuff) free(pReceiveBuff);
 	printf("VideoThread end\n");
 	ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
+	ProcessH264(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 
 	return 0;
 }
@@ -658,6 +670,165 @@ void Player::audio_callback(void* userdata, Uint8* stream, int len)
 	if (g_AudioMute) memset(p8, 0, len);
 	memcpy(stream, p8, len);
 	free(p8);
+}
+
+int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long long us = 0, int nReceiveSize = 0,
+	unsigned char* pReceiveBuff = 0, int SessionID = -1, int Width = 0, int Height = 0, void* ptr = NULL)
+{
+#if 1
+	static AVFrame* pFrame = 0;
+	static AVCodecContext* codecCtx = 0;
+	static AVCodec* codec = 0;
+	if (State == 0)
+	{
+		if (codecCtx)
+		{
+			avcodec_flush_buffers(codecCtx);
+			avcodec_close(codecCtx);
+			avcodec_free_context(&codecCtx);
+
+			AVPicture pict;
+			memset(&pict, 0, sizeof(pict));
+			pict.data[0] = (Uint8*)-1;
+			pict.data[1] = (Uint8*)-1;
+			pict.data[2] = (Uint8*)-1;
+			g_FrameQueue->push(pict, 0, 0, 0, 0);
+		}
+		codecCtx = 0;
+		codec = 0;
+		if (pFrame) av_frame_free(&pFrame);
+		pFrame = 0;
+		return 0;
+	}
+
+	AVPacket packet;
+	av_init_packet(&packet);
+	if (pos > 0)
+	{
+		packet.data = pReceiveBuff;
+		packet.size = nReceiveSize;
+
+		//abort();
+	}
+	printf("################\n");
+	printf("pos = %d\n", pos);
+	printf("################\n");
+	if (pos == 0) // HEVC HvcC
+	{
+		for (int i = 0; i < nReceiveSize; i++) {
+			printf("%x", pReceiveBuff[i]);
+		}
+		printf("\n");
+		unsigned int tier_flag, profile_idc;
+		bool bNeedResetCodec = true;
+		//if (codecCtx/*/ && codecCtx->extradata_size == nReceiveSize*/)
+		//{
+		//	if (memcmp(codecCtx->extradata, pReceiveBuff, nReceiveSize) == 0)
+		//	{
+		//		printf("bNeedResetCodec is false \n");
+		//		bNeedResetCodec = false;
+		//	}
+		//}
+		if (bNeedResetCodec)
+		{
+			ProcessH264();
+			unsigned char* HvcC = NULL;
+			int nLenHvcC = 0;
+			HvcC = (unsigned char*)av_mallocz(nReceiveSize);
+			if (HvcC == 0) {
+				printf("HvcC null\n");
+				return -1;
+			}
+			memcpy(HvcC, pReceiveBuff, nReceiveSize);
+			nLenHvcC = nReceiveSize;
+			codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+			std::cout << "codec = " << codec << std::endl;
+			if (codec == 0)
+			{
+				printf("AV_CODEC_ID_H264 not supported\n");
+				return -2;
+			}
+			codecCtx = avcodec_alloc_context3(codec);
+			if (codecCtx == 0)
+			{
+				printf("codecCtx null\n");
+				return -3;
+			}
+			codecCtx->profile = FF_PROFILE_H264_MAIN;
+
+			codecCtx->extradata = HvcC;
+			codecCtx->extradata_size = nLenHvcC;
+			int err = avcodec_open2(codecCtx, codec, NULL);
+			if (err != 0)
+			{
+				printf(" avcodec_open2 err null\n");
+				return -4;
+			}
+		}
+		printf("return!!!!\n");
+		return 0;
+	}
+	if (codecCtx == 0) {
+		printf("codecCtx is 0 !!!!\n");
+		return -3; //임시 주석
+	}
+
+	if (pFrame == 0) pFrame = av_frame_alloc();
+	int frameFinished = 0;
+	int ret = avcodec_decode_video2(codecCtx, pFrame, &frameFinished, &packet);
+
+	if (ret != nReceiveSize)
+	{
+		printf("fail to video decode!!! ret=%d toi=%d, pos=%d\n", ret, TOI, pos);
+
+		avcodec_flush_buffers(codecCtx);	
+
+		return -6;
+	}
+
+	// Did we get a video frame?
+	if (frameFinished == 0) return 0;
+
+	//printf("nScreenWidth=%d nScreenHeight=%d\n", nScreenWidth, nScreenHeight);
+	int nTargetBufferSize = pFrame->width * pFrame->height;
+	AVPicture pict;
+	pict.data[0] = (Uint8*)malloc(nTargetBufferSize); // Y
+	pict.data[1] = (Uint8*)malloc(nTargetBufferSize / 4); // U
+	pict.data[2] = (Uint8*)malloc(nTargetBufferSize / 4); // V
+	pict.linesize[0] = pFrame->width;
+	pict.linesize[1] = pFrame->width / 2;
+	pict.linesize[2] = pFrame->width / 2;
+	if (pict.data[0] == 0 || pict.data[1] == 0 || pict.data[2] == 0)
+	{
+		printf("insufficient memory YUV\n");
+		return -7;
+	}
+	struct SwsContext* sws_ctx = sws_getContext(pFrame->width, pFrame->height, (AVPixelFormat)pFrame->format, pFrame->width, pFrame->height, AV_PIX_FMT_YUV420P, SWS_BILINEAR, NULL, NULL, NULL);
+	sws_scale(sws_ctx, (uint8_t const* const*)pFrame->data, pFrame->linesize, 0, pFrame->height, pict.data, pict.linesize);
+	sws_freeContext(sws_ctx);
+	//printf("pFrame->width=%d, pFrame->height=%d\n", pFrame->width, pFrame->height);
+#if 1
+	if (g_FrameQueue->push(pict, us, pFrame->width, pFrame->height, SessionID) == false)
+	{
+		free(pict.data[0]);
+		free(pict.data[1]);
+		free(pict.data[2]);
+	} else printf("push pFrame->width=%d, pFrame->height=%d\n", pFrame->width, pFrame->height);
+#else
+	while (g_FrameQueue->push(pict, us, pFrame->width, pFrame->height, SessionID) == false)
+	{
+		SDL_Delay(1);
+		if (bSystemRun == false)
+		{
+			free(pict.data[0]);
+			free(pict.data[1]);
+			free(pict.data[2]);
+			break;
+		}
+	}
+#endif
+	return 0;
+#endif
 }
 
 int Player::ProcessMPEG2(int State = 0, int TOI = 0, int pos = 0, unsigned long long us = 0, int nReceiveSize = 0, unsigned char* pReceiveBuff = 0, int SessionID = -1, int Width = 0, int Height = 0, void* ptr = NULL)
