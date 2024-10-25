@@ -514,7 +514,7 @@ void TsParser::Init() {
 									{
 									case PES_TYPE_H264_VIDEO:
 									case PES_TYPE_MPEG2_VIDEO:
-										std::cout << "PES_TYPE_MPEG2_VIDEO" << std::endl;
+										std::cout << "PES_TYPE_MPEG2_VIDEO or PES_TYPE_H26" << std::endl;
 										nodesVideo->reset();
 										break;
 									case PES_TYPE_AC3_AUDIO:
@@ -590,7 +590,7 @@ void TsParser::Init() {
 		
 		//SHLEE
 		if (count == 500) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			count = 0;
 		}
 
@@ -823,7 +823,7 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 
 				break;
 			}case PES_TYPE_BSAC_AUDIO:
-				std::cout << "PES_TYPE_BSAC_AUDIO" << std::endl;
+				//std::cout << "PES_TYPE_BSAC_AUDIO" << std::endl;
 				break;
 			default:
 				std::cout << "table type = " << table.type << std::endl;
@@ -1533,7 +1533,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 			}
 		#endif
 
-			if ((idx + len) <= usLength) {				
+			if ((idx + len) <= usLength) {
 				for (unsigned int i = idx + 5; i < (idx + len - 10); i++) {
 					unsigned int start_code2 = buf[i + 0];
 					start_code2 = (start_code2 << 8) | buf[i + 1];
@@ -1596,7 +1596,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 						if (param_len) {
 							if (g_av_callback) {
 								//printf("g_av_callback SPS_NUT or PPS_NUT buf=%x",buf[i]);
-							#if 0
+							#if 1
 								g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
 									(dts ? dts : pts) * 100 / 9,
 									param_len, &buf[i], g_SessionID, buffer_time_us, 0, 0);
@@ -1624,9 +1624,9 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 					}
 
 					if (g_av_callback)
-						if (g_av_callback) {
-							//printf("g_av_callback!!!!!\n");
-						#if 0
+						if (g_av_callback) {							
+						#if 1
+							printf("g_av_callback!!!!!\n");
 							g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
 								(dts ? dts : pts) * 100 / 9,
 								len, &buf[idx], g_SessionID, buffer_time_us, 0, 0);

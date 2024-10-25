@@ -151,7 +151,7 @@ int Player::VideoThread(void* ptr) {
 		int width = 0;
 		int height = 0;
 		pReceiveBuff = g_videoQueue->pop(Codec, &TOI, &pos, &us, &nReceiveSize, &SessionID, &width, &height);
-		//std::cout << "nReceiveSize = " << nReceiveSize << std::endl;
+		//std::cout << "g_videoQueue->pop: = " << pos << std::endl;
 		if (nReceiveSize == 0)
 		{
 			bNoWait = false;
@@ -167,7 +167,7 @@ int Player::VideoThread(void* ptr) {
 			continue;
 		}
 		bNoWait = false;
-		printf("Codec=%s pos=%d us=%llu now=%llu nReceiveSize=%d\n", Codec, pos, us, getTimeUs(), nReceiveSize);
+		//printf("Codec=%s pos=%d us=%llu now=%llu nReceiveSize=%d\n", Codec, pos, us, getTimeUs(), nReceiveSize);
 		if (strcmp(Codec, "mpeg2") == 0) // MPEG2
 		{
 			std::cout << "codec is mpeg2 in VideoThread" << std::endl;;
@@ -176,14 +176,14 @@ int Player::VideoThread(void* ptr) {
 		else if (strcmp(Codec, "h264") == 0)
 		{
 			std::cout << "codec is h264 in VideoThread" << std::endl;
-			ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
+			//ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 			//임시
 			//pos = 1;
-
 			ProcessH264(1, TOI, pos, us, nReceiveSize, pReceiveBuff, SessionID, width, height, ptr);
 		}
 		if (strcmp(Codec, "reset") == 0) // CHANNEL CHANGE CODEC RESET
 		{
+			std::cout << "codec is reset in VideoThread" << std::endl;
 			ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 			ProcessH264(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 		}
@@ -679,6 +679,7 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 	static AVFrame* pFrame = 0;
 	static AVCodecContext* codecCtx = 0;
 	static AVCodec* codec = 0;
+	printf("111111111111111111111111111 state[%d]\n",State);
 	if (State == 0)
 	{
 		if (codecCtx)
@@ -707,17 +708,15 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 	{
 		packet.data = pReceiveBuff;
 		packet.size = nReceiveSize;
-
-		//abort();
 	}
 	printf("################\n");
 	printf("pos = %d\n", pos);
 	printf("################\n");
 	if (pos == 0) // HEVC HvcC
 	{
-		for (int i = 0; i < nReceiveSize; i++) {
+		/*for (int i = 0; i < nReceiveSize; i++) {
 			printf("%x", pReceiveBuff[i]);
-		}
+		}*/
 		printf("\n");
 		unsigned int tier_flag, profile_idc;
 		bool bNeedResetCodec = true;
@@ -1492,12 +1491,12 @@ void Player::avPlayerSDL(unsigned char* data, int size) {
 
 void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned long long decode_time_us, unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2)
 {
-	//printf("[%s] %s %d %d %llu %u\n", __func__, codec, TOI, pos, decode_time_us, data_length);
+	printf("[%s] %s %d %d %llu %u\n", __func__, codec, TOI, pos, decode_time_us, data_length);
 	g_SessionID = SessionID;
 
 	static unsigned long long first_video_decode_time_us = 0, first_decode_time_us = 0, first_system_time_us = 0, offset_time_us = 0;
 	if (strcmp(codec, "aac") == 0 || strcmp(codec, "ac3") == 0 || strcmp(codec, "mpegh") == 0 || strcmp(codec, "mp2") == 0 || strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") == 0
-		|| strcmp(codec, "h264"))
+		|| strcmp(codec, "h264") == 0)
 	{
 		if (decode_time_us)
 		{
@@ -1541,7 +1540,7 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 	if (strcmp(codec, "reset") == 0)
 	{
 		g_SessionID = SessionID;
-		
+		printf("codec is reset. gVideo/gAudio queue push!!");
 		g_audioQueue->push(codec, 0, 0, 0, (unsigned int)strlen(codec), (unsigned char*)codec, SessionID, 0, 0); // Simple Queue의 reset 함수에서 초기화하기 위해서는 더미 데이터가 필요하다.
 		g_videoQueue->push(codec, 0, 0, 0, (unsigned int)strlen(codec), (unsigned char*)codec, SessionID, 0, 0); // Simple Queue의 reset 함수에서 초기화하기 위해서는 더미 데이터가 필요하다.
 	}
@@ -1562,7 +1561,7 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 			video_offset_time_us = offset_time_us;
 
 			unsigned long long new_decode_time_us = decode_time_us - first_decode_time_us + first_system_time_us;
-			//std::cout << "gVideoQueue push" << std::endl;
+			std::cout << "gVideoQueue push" << std::endl;
 			g_videoQueue->push(codec, TOI, pos, new_decode_time_us + video_offset_time_us, data_length, data, SessionID, param1, param2);			
 			//printf("|hevc| %llu, %llu\n", decode_time_us, new_decode_time_us + offset_time_us);
 		}
