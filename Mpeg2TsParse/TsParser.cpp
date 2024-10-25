@@ -1517,7 +1517,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 			unsigned int len = usLength - idx;
 			//std::cout << "0x00000001(AUD)" << std::endl;
 		#if 1
-			for (unsigned int next = idx + 7; next < (usLength - 5); next++) {
+			for (unsigned int next = idx + 5; next < (usLength - 5); next++) {
 				unsigned int next_start_code = buf[next + 0];
 				next_start_code = (next_start_code << 8) | buf[next + 1];
 				next_start_code = (next_start_code << 8) | buf[next + 2];
@@ -1533,87 +1533,85 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 			}
 		#endif
 
-			if ((idx + len) <= usLength) {
-				//if (pic_type == 0 || pic_type == 1 || pic_type == 2) {
-					for (unsigned int i = idx + 7; i < (idx + len - 10); i++) {
-						unsigned int start_code2 = buf[i + 0];
-						start_code2 = (start_code2 << 8) | buf[i + 1];
-						start_code2 = (start_code2 << 8) | buf[i + 2];
-						start_code2 = (start_code2 << 8) | buf[i + 3];
-						//unsigned int start_code2 = (buf[i + 0] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
-					#if 0
-						if (buf[i + 4] == 67) {
-							printf("0x67!!! -> [0x%x]\n", 0x67 & 0x1f);
-						}
-						else if(buf[i + 4] == 68){
-							printf("0x68!!! -> [0x%x]\n", 0x68 & 0x1f);
-						}
-					#endif
-						unsigned char nal_unit_type2 = (buf[i + 4] & 0x1f);
-					#if 0
-						//if (nal_unit_type2 == 7 || nal_unit_type2 == 8) {
-							printf("##################\n");
-							printf("idx[%d], buf[i+4]:][0x%02x], buf[i+4] & 0x1f : %d, start_code2[0x%02x]\n", idx, buf[i + 4], nal_unit_type2, start_code2);
-							printf("##################\n");
-						//}
-					#endif
-						if (start_code2 == 0x00000001 && (nal_unit_type2 == hvccParser->SPS_NUT || nal_unit_type2 == hvccParser->PPS_NUT)) {
-							#if 0
-								printf("pts %llu\n", pts);
-								static FILE* vfp = NULL;
-								if (!vfp)
-								{
-									fopen_s(&vfp, "video11.es", "wb");
-								}
+			if ((idx + len) <= usLength) {				
+				for (unsigned int i = idx + 5; i < (idx + len - 10); i++) {
+					unsigned int start_code2 = buf[i + 0];
+					start_code2 = (start_code2 << 8) | buf[i + 1];
+					start_code2 = (start_code2 << 8) | buf[i + 2];
+					start_code2 = (start_code2 << 8) | buf[i + 3];
+					//unsigned int start_code2 = (buf[i + 0] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
+				#if 0
+					if (buf[i + 4] == 67) {
+						printf("0x67!!! -> [0x%x]\n", 0x67 & 0x1f);
+					}
+					else if(buf[i + 4] == 68){
+						printf("0x68!!! -> [0x%x]\n", 0x68 & 0x1f);
+					}
+				#endif
+					unsigned char nal_unit_type2 = (buf[i + 4] & 0x1f);
+				#if 0
+					//if (nal_unit_type2 == 7 || nal_unit_type2 == 8) {
+						printf("##################\n");
+						printf("idx[%d], buf[i+4]:][0x%02x], buf[i+4] & 0x1f : %d, start_code2[0x%02x]\n", idx, buf[i + 4], nal_unit_type2, start_code2);
+						printf("##################\n");
+					//}
+				#endif
+					if (start_code2 == 0x00000001 && (nal_unit_type2 == hvccParser->SPS_NUT || nal_unit_type2 == hvccParser->PPS_NUT)) {
+						#if 0
+							printf("pts %llu\n", pts);
+							static FILE* vfp = NULL;
+							if (!vfp)
+							{
+								fopen_s(&vfp, "video11.es", "wb");
+							}
 
-								if (vfp)
-								{
-									fwrite(ucData, 1, usLength, vfp);
-								}
-							#endif
-							unsigned int param_len = 0;
-							if (nal_unit_type2 == hvccParser->SPS_NUT) {
-								printf("SPS Found!!!\n");
+							if (vfp)
+							{
+								fwrite(ucData, 1, usLength, vfp);
 							}
-							if (nal_unit_type2 == hvccParser->PPS_NUT) {
-								printf("PPS Found!!!\n");
-								//abort();
-							}
+						#endif
+						unsigned int param_len = 0;
+						if (nal_unit_type2 == hvccParser->SPS_NUT) {
+							printf("SPS Found!!!\n");
+						}
+						if (nal_unit_type2 == hvccParser->PPS_NUT) {
+							printf("PPS Found!!!\n");
+							//abort();
+						}
 							
-							//printf("start!! nal_unit_type2=0x%x\n", nal_unit_type2);
-							for (unsigned int j = i + 7; j < (idx + len - 5); j++) {
-								unsigned int next_start_code = buf[j + 0];
-								next_start_code = (next_start_code << 8) | buf[j + 1];
-								next_start_code = (next_start_code << 8) | buf[j + 2];
-								next_start_code = (next_start_code << 8) | buf[j + 3];
-								unsigned char next_nal_unit_type = (buf[j + 4] & 0x1f);
-								//printf("next_nal_unit_type[0x%x]\n", next_nal_unit_type);
-								if (next_start_code == 0x00000001 && !(next_nal_unit_type == hvccParser->SPS_NUT || next_nal_unit_type == hvccParser->PPS_NUT)) {
-									param_len = j - i;
-									break;
-								}
-							}
-
-							if (param_len) {
-								if (g_av_callback) {
-									//printf("g_av_callback SPS_NUT or PPS_NUT buf=%x",buf[i]);
-								#if 0
-									g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
-										(dts ? dts : pts) * 100 / 9,
-										param_len, &buf[i], g_SessionID, buffer_time_us, 0, 0);
-
-									//abort();
-								#else
-									esFile.write(reinterpret_cast<char*>(&buf[idx]), len);
-									printf("first write!!!\n");
-								#endif
-								}
-
+						//printf("start!! nal_unit_type2=0x%x\n", nal_unit_type2);
+						for (unsigned int j = i + 5; j < (idx + len - 5); j++) {
+							unsigned int next_start_code = buf[j + 0];
+							next_start_code = (next_start_code << 8) | buf[j + 1];
+							next_start_code = (next_start_code << 8) | buf[j + 2];
+							next_start_code = (next_start_code << 8) | buf[j + 3];
+							unsigned char next_nal_unit_type = (buf[j + 4] & 0x1f);
+							//printf("next_nal_unit_type[0x%x]\n", next_nal_unit_type);
+							if (next_start_code == 0x00000001 && !(next_nal_unit_type == hvccParser->SPS_NUT || next_nal_unit_type == hvccParser->PPS_NUT)) {
+								param_len = j - i;
 								break;
 							}
 						}
+
+						if (param_len) {
+							if (g_av_callback) {
+								//printf("g_av_callback SPS_NUT or PPS_NUT buf=%x",buf[i]);
+							#if 0
+								g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
+									(dts ? dts : pts) * 100 / 9,
+									param_len, &buf[i], g_SessionID, buffer_time_us, 0, 0);
+
+								//abort();
+							#else
+								esFile.write(reinterpret_cast<char*>(&buf[idx]), len);
+								printf("first write!!!\n");
+							#endif
+							}
+
+							break;
+						}
 					}
-				//}
+				}
 
 				if (buffer_time_us) {
 					int presentation_time_offset_us = 0;
