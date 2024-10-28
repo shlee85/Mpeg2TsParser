@@ -679,7 +679,7 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 	static AVFrame* pFrame = 0;
 	static AVCodecContext* codecCtx = 0;
 	static AVCodec* codec = 0;
-	printf("111111111111111111111111111 state[%d]\n",State);
+
 	if (State == 0)
 	{
 		if (codecCtx)
@@ -709,9 +709,7 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 		packet.data = pReceiveBuff;
 		packet.size = nReceiveSize;
 	}
-	printf("################\n");
-	printf("pos = %d\n", pos);
-	printf("################\n");
+
 	if (pos == 0) // HEVC HvcC
 	{
 		/*for (int i = 0; i < nReceiveSize; i++) {
@@ -753,7 +751,7 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 				printf("codecCtx null\n");
 				return -3;
 			}
-			codecCtx->profile = FF_PROFILE_H264_MAIN;
+			codecCtx->profile = FF_PROFILE_H264_BASELINE;	//위키에서는 DMB는 baseline이라고는 하는데....
 
 			codecCtx->extradata = HvcC;
 			codecCtx->extradata_size = nLenHvcC;
