@@ -151,7 +151,7 @@ int Player::VideoThread(void* ptr) {
 		int width = 0;
 		int height = 0;
 		pReceiveBuff = g_videoQueue->pop(Codec, &TOI, &pos, &us, &nReceiveSize, &SessionID, &width, &height);
-		//std::cout << "g_videoQueue->pop: = " << pos << std::endl;
+//		std::cout << "g_videoQueue->pop: = " << pos << std::endl;
 		if (nReceiveSize == 0)
 		{
 			bNoWait = false;
@@ -176,6 +176,7 @@ int Player::VideoThread(void* ptr) {
 		else if (strcmp(Codec, "h264") == 0)
 		{
 			std::cout << "codec is h264 in VideoThread" << std::endl;
+			std::cout << "g_videoQueue->pop: = " << pos << std::endl;
 			//ProcessMPEG2(0, 0, 0, 0, 0, 0, -1, 0, 0, NULL);
 			//임시
 			//pos = 1;
@@ -712,10 +713,13 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 
 	if (pos == 0) // HEVC HvcC
 	{
-		/*for (int i = 0; i < nReceiveSize; i++) {
-			printf("%x", pReceiveBuff[i]);
-		}*/
+#if 1
+		printf("-->");
+		for (int i = 0; i < nReceiveSize; i++) {
+			printf("0x%02X ", pReceiveBuff[i]);
+		}
 		printf("\n");
+#endif
 		unsigned int tier_flag, profile_idc;
 		bool bNeedResetCodec = true;
 		//if (codecCtx/*/ && codecCtx->extradata_size == nReceiveSize*/)
@@ -762,9 +766,10 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 				return -4;
 			}
 		}
-		printf("return!!!!\n");
+		printf("리턴!!\n");
 		return 0;
 	}
+	printf("111111111111111111111\n");
 	if (codecCtx == 0) {
 		printf("codecCtx is 0 !!!!\n");
 		return -3; //임시 주석
@@ -803,7 +808,7 @@ int Player::ProcessH264(int State = 0, int TOI = 0, int pos = 0, unsigned long l
 	struct SwsContext* sws_ctx = sws_getContext(pFrame->width, pFrame->height, (AVPixelFormat)pFrame->format, pFrame->width, pFrame->height, AV_PIX_FMT_YUV420P, SWS_BILINEAR, NULL, NULL, NULL);
 	sws_scale(sws_ctx, (uint8_t const* const*)pFrame->data, pFrame->linesize, 0, pFrame->height, pict.data, pict.linesize);
 	sws_freeContext(sws_ctx);
-	//printf("pFrame->width=%d, pFrame->height=%d\n", pFrame->width, pFrame->height);
+	printf("pFrame->width=%d, pFrame->height=%d\n", pFrame->width, pFrame->height);
 #if 1
 	if (g_FrameQueue->push(pict, us, pFrame->width, pFrame->height, SessionID) == false)
 	{
@@ -1084,7 +1089,7 @@ void Player::mainLoop() {
 #if 0
 	std::string sourcePath = "C:\\Work\\STREAM\\ts\\av_s1.ts";	//h264
 #else	
-	std::string sourcePath = "C:\\Work\\STREAM\\dmb\\myMBC.ts";		//DMB
+	std::string sourcePath = "C:\\Work\\STREAM\\dmb\\myMBC.ts";	//DMB	
 #endif
 	std::string outputPath = "ouputs/parser.txt";
 	TsParser *ts = new TsParser(sourcePath, outputPath);
@@ -1496,7 +1501,7 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 {
 	printf("[%s] %s %d %d %llu %u\n", __func__, codec, TOI, pos, decode_time_us, data_length);
 	g_SessionID = SessionID;
-
+	decode_time_us = 1;
 	static unsigned long long first_video_decode_time_us = 0, first_decode_time_us = 0, first_system_time_us = 0, offset_time_us = 0;
 	if (strcmp(codec, "aac") == 0 || strcmp(codec, "ac3") == 0 || strcmp(codec, "mpegh") == 0 || strcmp(codec, "mp2") == 0 || strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") == 0
 		|| strcmp(codec, "h264") == 0)
@@ -1557,14 +1562,14 @@ void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned 
 		}
 	}
 	if (strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") || strcmp(codec, "h264") == 0)
-	{
+	{		
 		if (first_decode_time_us || pos == 0)
 		{
 			unsigned long long video_offset_time_us;
 			video_offset_time_us = offset_time_us;
 
 			unsigned long long new_decode_time_us = decode_time_us - first_decode_time_us + first_system_time_us;
-			std::cout << "gVideoQueue push" << std::endl;
+			std::cout << "gVideoQueue push " << "[" << pos << "]" << std::endl;
 			g_videoQueue->push(codec, TOI, pos, new_decode_time_us + video_offset_time_us, data_length, data, SessionID, param1, param2);			
 			//printf("|hevc| %llu, %llu\n", decode_time_us, new_decode_time_us + offset_time_us);
 		}

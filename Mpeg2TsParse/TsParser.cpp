@@ -133,25 +133,25 @@ void TsParser::Init() {
 
 		for (STREAM_TABLE& table : m_vec_stream_table) {
 			//printf("stream type [0x%X], serviceId[%d]program[%d]\n", table.stream_type, serviceId, table.program_number);
-			if (rf != table.rf) {				
+			if (rf != table.rf) {
 				continue;
 			}
 			//Test용도 이므로 serviceId를 -1로 설정 하였음,
-			if (serviceId != -1 && serviceId != table.program_number) {				
+			if (serviceId != -1 && serviceId != table.program_number) {
 				continue;
 			}
 			if (table.stream_type != TS_VIDEO_TYPE_MPEG2 && table.stream_type != TS_VIDEO_TYPE_H264
-				&& table.stream_type != STREAM_TYPE_MPEG_4_GENERIC && table.stream_type != STREAM_TYPE_ISO_14496_1_SL_PKT) {				
+				&& table.stream_type != STREAM_TYPE_MPEG_4_GENERIC && table.stream_type != STREAM_TYPE_ISO_14496_1_SL_PKT) {
 				continue;
 			}
 
 			unsigned short elementary_pid = table.elementary_pid;
-			bool bFind = false;			
+			bool bFind = false;
 			for (PID_TABLE& table2 : m_vec_pid_table) {
 				if (rf != table2.rf || elementary_pid != table2.pid) continue;
 				bFind = true;
 				break;
-			}			
+			}
 			if (!bFind) {
 				g_SessionID = (g_SessionID > 100000) ? 0 : g_SessionID + 1;
 			#if 0
@@ -160,7 +160,7 @@ void TsParser::Init() {
 						g_SessionID, 0, 0, 0, 0, 0,
 						""); // AV RESET for Channel Change or Source Change
 			#endif
-				nodesVideo->reset();				
+				nodesVideo->reset();
 				PES_TABLE pes_table;
 				pes_table.rf = rf;
 				pes_table.pid = elementary_pid;
@@ -184,7 +184,7 @@ void TsParser::Init() {
 					//abort();
 				}
 				m_vec_pes_table.push_back(pes_table);
-								
+
 				PID_TABLE pid_table;
 				pid_table.rf = rf;
 				pid_table.pid = elementary_pid;
@@ -198,13 +198,13 @@ void TsParser::Init() {
 			}
 			break;
 		}
-		
+
 		//SelectAudioID_PMT(rf, serviceId);	//오디오 언어 선택 관련 처리 ( 국내향 / 미주향별 )
 		for (STREAM_TABLE& table : m_vec_stream_table) {
 			if (rf != table.rf) {				
 				continue;
 			}
-			if (serviceId != -1 && serviceId != table.program_number) {			
+			if (serviceId != -1 && serviceId != table.program_number) {
 				continue;
 			}
 			if (table.stream_type != TS_AUDIO_TYPE_AAC && table.stream_type != TS_AUDIO_TYPE_AC3 
@@ -235,7 +235,7 @@ void TsParser::Init() {
 			#endif		
 				nodesAudio->reset();
 
-				
+
 				//auto& v2 = m_vec_pes_table;
 				//for (size_t i = v2.size(); 0 < i; i--) {
 				//	if (rf != v2[i - 1].rf)
@@ -402,7 +402,7 @@ void TsParser::Init() {
 										nodesVideo->reset();
 										break;
 									case PES_TYPE_AC3_AUDIO:
-									case PES_TYPE_AAC_AUDIO:									
+									case PES_TYPE_AAC_AUDIO:
 										std::cout << "PES_TYPE_AC3_AUDIO | PES_TYPE_AAC_AUDIO" << std::endl;
 										nodesAudio->reset();
 										break;							
@@ -434,15 +434,16 @@ void TsParser::Init() {
 								}
 
 								if (table.nodes->len()) {
-									//todo. processSectionData() 구현.									
+									//todo. processSectionData() 구현.
 									processSectionData(rf, serviceId, pid, table.nodes->get(0, table.nodes->len()), table.nodes->len());									
 								}
 
 								break;
 							}
-							case PID_TYPE_PES: {								
+							case PID_TYPE_PES: {
 								if (table.nodes->len()) {
-									//todo. processPesData() 구현.									
+									//todo. processPesData() 구현.
+									//printf("PID_TYPE_PES\n");
 									processPesData(rf, serviceId, pid, table.nodes->get(0, table.nodes->len()), table.nodes->len());
 								}
 								break;
@@ -468,8 +469,8 @@ void TsParser::Init() {
 							//		printf("222222222222\n");
 							//	}
 							//}
-							table.nodes->reset();							
-							table.nodes->add(0, data, len, 0);							
+							table.nodes->reset();
+							table.nodes->add(0, data, len, 0);
 						}
 						else if (table.payload_unit_start) {
 							unsigned int len = bb.remain();
@@ -739,7 +740,7 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 				break;
 			}
 			default:
-				std::cout << "table type = " << table.type << std::endl;
+				//std::cout << "table type = " << table.type << std::endl;
 				break;
 			}
 		}
@@ -1211,7 +1212,7 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 		m_vec_pcr_table.push_back(pcr_table);
 	//printf("Add pcr pcr_pid 0x%x\n", pcr_pid);
 	}
-	
+
 	if (program_info_length) {
 		for (CByteBuffer pp(bb.gets(program_info_length), program_info_length); pp.remain();) {
 			unsigned char descriptor_tag = pp.get();
@@ -1220,14 +1221,14 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 			if (descriptor_tag == DESCRIPTOR_TAG_CONTENT_ADVISORY) {
 				std::vector<CONTENT_ADVISORY_TABLE> content_advisory_table;
 				processContentAdvisoryDescriptorData(pp.gets(descriptor_length),
-					descriptor_length, content_advisory_table);				
+					descriptor_length, content_advisory_table);
 			}
 			else {
 				pp.gets(descriptor_length);
-			}			
+			}
 		}
 	}
-	
+
 	for (; 4 < bb.remain();) {
 		unsigned char stream_type = bb.get();
 		unsigned short elementary_pid = bb.get2() & 0x1fff;
@@ -1257,15 +1258,15 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 					//printf("DESCRIPTOR_TAG_SYNC_LAYER\n");
 					processSyncLayerDescriptorData(ee.gets(descriptor_length), descriptor_length, &es_id);
 					break;
-				default:					
+				default:
 					ee.gets(descriptor_length);
 					break;
 				}
 			}
 		}
-		
+
 		//DMB로 인한 추가
-		bool bFind2 = false;		
+		bool bFind2 = false;
 		if (stream_type == STREAM_TYPE_ISO_14496_1_SL_PKT) {
 			for (PID_TABLE& table : m_vec_pid_table) {
 				if (rf != table.rf)
@@ -1284,9 +1285,9 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 				pid_table.continuity_counter = 0;
 				pid_table.type = PID_TYPE_SECTION;
 				pid_table.nodes = new CNodes;
-				
+
 				m_vec_pid_table.push_back(pid_table);
-				//m_vec_pid_table.emplace_back(pid_table);				
+				//m_vec_pid_table.emplace_back(pid_table);
 
 				printf("Add ISO14496-1 SL-packetized elementary_pid 0x%x stream_type 0x%x %p\n", elementary_pid, stream_type, pid_table.nodes);
 			}
@@ -1318,6 +1319,7 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 				stream_table.stream_type = stream_type;
 				stream_table.language = language;
 				stream_table.audio_type = audio_type;
+				stream_table.es_id = es_id;
 				stream_table.crc32 = crc32;
 				m_vec_stream_table.push_back(stream_table);
 
@@ -1338,17 +1340,8 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 
 	const char prefix[] = { 0x0, 0x0, 0x0, 0x1 };
 	static FILE* vfp = NULL;
-	//printf("value = [%d]\n", (buf[0] & 0x1f));
 
-	static FILE* vfp2 = NULL;
-	if (!vfp2)
-	{
-		vfp2 = fopen("video_shlee.es", "wb");
-	}
-	if (vfp2)
-	{
-		fwrite(ucData, 1, usLength, vfp2);
-	}
+	//printf("value = [%d]\n", (buf[0] & 0x1f));
 
 	switch (buf[0] & 0x1f) {
 		case 5: {
@@ -1376,20 +1369,60 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 				break;
 			}
 
+			size_t newBufSize = initData.length();
+			unsigned char* newBuf = new unsigned char[newBufSize];
+
 			if (vfp) {
-				fwrite(initData.c_str(), 1, initData.length(), vfp);
+				/*fwrite(initData.c_str(), 1, initData.length(), vfp);
 				fwrite(prefix, 1, sizeof(prefix), vfp);
-				fwrite(buf, 1, usLength, vfp);
-				//printf("write!!!\n");
+				fwrite(buf, 1, usLength, vfp);*/
+
+				memcpy(newBuf, initData.c_str(), initData.length());
+				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
+					(dts ? dts : pts) * 100 / 9,
+					static_cast<int>(initData.length()), newBuf, g_SessionID, buffer_time_us, 0, 0);
+
+				delete[] newBuf;
+
+
+				size_t newBufSize = sizeof(prefix) + usLength;
+				unsigned char* newBuf = new unsigned char[newBufSize];			
+				memcpy(newBuf, prefix, sizeof(prefix));
+				memcpy(newBuf + sizeof(prefix), buf, usLength);
+				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
+					(dts ? dts : pts) * 100 / 9,
+					static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
+
+				//printBinary("intit!", buf, usLength);
+				//printf("usLength  - 1[%d]\n", usLength);
+				//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);				
+
+				delete[] newBuf;
 			}
 
 			break;
 		}
 		default: {
+
+			size_t newBufSize = sizeof(prefix) + usLength;
+			unsigned char* newBuf = new unsigned char[newBufSize];
+			memcpy(newBuf, prefix, sizeof(prefix));
+			memcpy(newBuf + sizeof(prefix), buf, usLength);
+
+			g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
+				(dts ? dts : pts) * 100 / 9,
+				sizeof(newBuf), newBuf, g_SessionID, buffer_time_us, 0, 0);
+
+			//printBinary("Data!", newBuf, usLength);
+			//printf("usLength  -2[%d]\n", usLength);
+			//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
+
 			if (vfp) {
-				fwrite(prefix, 1, sizeof(prefix), vfp);
-				fwrite(buf, 1, usLength, vfp);
+				//fwrite(prefix, 1, sizeof(prefix), vfp);
+				//fwrite(buf, 1, usLength, vfp);
 			}
+
+			delete[] newBuf;
 
 			break;
 		}
@@ -1399,12 +1432,13 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts,
 	unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us) {
 	//abort();
-#if 0
-	printf("pts %llu\n", pts);
+	
+#if 1
+	//printf("pts %llu\n", pts);
 	static FILE* vfp = NULL;
 	if (!vfp)
 	{
-		fopen_s(&vfp, "video.ts", "wb");
+		fopen_s(&vfp, "DMB1.ts", "wb");
 	}
 
 	if (vfp)
@@ -1416,28 +1450,37 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 	unsigned char* buf = ucData;
 	unsigned int idx = 0;
 
-	for (; idx < (usLength - 7);) {
+	for (; idx < (usLength - 7);) {		
 		unsigned int start_code = buf[idx + 0];
 		start_code = (start_code << 8) | buf[idx + 1];
 		start_code = (start_code << 8) | buf[idx + 2];
 		start_code = (start_code << 8) | buf[idx + 3];
 		//unsigned int start_code = (buf[idx + 0] << 24) | (buf[idx + 1] << 16) | (buf[idx + 2] << 8) | buf[idx + 3];
-		unsigned char nal_unit_type = (buf[idx + 4] & 0x1f);
-		//unsigned char pic_type = (buf[idx + 6] >> 5) & 0x07;
+		unsigned char nal_unit_type = (buf[idx + 4] & 0x1f);	
 
-		if (start_code == 0x00000001 && nal_unit_type == hvccParser->AUD_NUT) {
+		if (start_code == 0x00000001){
 			unsigned int len = usLength - idx;
-			//std::cout << "0x00000001(AUD)" << std::endl;
+			//std::cout << "0x00000001 start code" << std::endl;
+			
 		#if 1
 			for (unsigned int next = idx + 5; next < (usLength - 5); next++) {
 				unsigned int next_start_code = buf[next + 0];
 				next_start_code = (next_start_code << 8) | buf[next + 1];
 				next_start_code = (next_start_code << 8) | buf[next + 2];
 				next_start_code = (next_start_code << 8) | buf[next + 3];
+				
 				//unsigned int next_start_code = (buf[next + 0] << 24) | (buf[next + 1] << 16) | (buf[next + 2] << 8) | buf[next + 3];
 				unsigned char next_nal_unit_type = (buf[next + 4] & 0x1f);
 				if (next_start_code == 0x00000001) {
-					if (next_nal_unit_type == hvccParser->AUD_NUT) {
+					if (nal_unit_type == hvccParser->AUD_NUT) {
+						//printf("22222222222222222222\n");
+						if (next_nal_unit_type == hvccParser->AUD_NUT) {
+							len = next - idx;
+							break;
+						}
+					}
+					else {
+						printf("next_nal_unit_type(%d)\n", next_nal_unit_type);
 						len = next - idx;
 						break;
 					}
@@ -1452,12 +1495,14 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 					start_code2 = (start_code2 << 8) | buf[i + 2];
 					start_code2 = (start_code2 << 8) | buf[i + 3];
 					//unsigned int start_code2 = (buf[i + 0] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
-				#if 0
+				#if 1
 					if (buf[i + 4] == 67) {
-						printf("0x67!!! -> [0x%x]\n", 0x67 & 0x1f);
+						printf("0x67!!! -> [%d], %d, %d\n", 0x67 & 0x1f, (buf[i+4]), (buf[i+5]));
+						//printBinary("H264", ucData, usLength);
 					}
-					else if(buf[i + 4] == 68){
-						printf("0x68!!! -> [0x%x]\n", 0x68 & 0x1f);
+					else if(buf[i + 4] == 68) {
+						/*printf("0x68!!! -> [0x%x]\n", 0x68 & 0x1f);
+						printf("start code = 0x%X\n", start_code2);*/
 					}
 				#endif
 					unsigned char nal_unit_type2 = (buf[i + 4] & 0x1f);
@@ -1468,13 +1513,17 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 						printf("##################\n");
 					//}
 				#endif
+					if (start_code2 == 0x00000001) {
+						printf("nal unit[0x%X]\n", nal_unit_type2);
+					}
 					if (start_code2 == 0x00000001 && (nal_unit_type2 == hvccParser->SPS_NUT || nal_unit_type2 == hvccParser->PPS_NUT)) {
+						printf("1111111111111111111111111111111111111111111");
 						#if 0
 							printf("pts %llu\n", pts);
 							static FILE* vfp = NULL;
 							if (!vfp)
 							{
-								fopen_s(&vfp, "video11.es", "wb");
+								fopen_s(&vfp, "shlee111.es", "wb");
 							}
 
 							if (vfp)
@@ -1498,7 +1547,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 							next_start_code = (next_start_code << 8) | buf[j + 2];
 							next_start_code = (next_start_code << 8) | buf[j + 3];
 							unsigned char next_nal_unit_type = (buf[j + 4] & 0x1f);
-							//printf("next_nal_unit_type[0x%x]\n", next_nal_unit_type);
+							printf("next_nal_unit_type[0x%x]\n", next_nal_unit_type);
 							if (next_start_code == 0x00000001 && !(next_nal_unit_type == hvccParser->SPS_NUT || next_nal_unit_type == hvccParser->PPS_NUT)) {
 								param_len = j - i;
 								break;
@@ -1507,7 +1556,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 
 						if (param_len) {
 							if (g_av_callback) {
-								//printf("g_av_callback SPS_NUT or PPS_NUT buf=%x",buf[i]);
+								printf("g_av_callback SPS_NUT or PPS_NUT buf=%x",buf[i]);
 							#if 1
 								g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
 									(dts ? dts : pts) * 100 / 9,
@@ -1554,7 +1603,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 				break;
 			}
 		}
-		else {
+		else {			
 			idx++;
 		}
 	}
@@ -2161,14 +2210,19 @@ void TsParser::processH264InfoData(unsigned char* ucData, unsigned int usLength,
 	}
 
 	for (STREAM_TABLE& table : m_vec_stream_table) {
-		if (rf != table.rf)
+		//printf("codec_type[%d]\n", table.codec_type);
+		if (rf != table.rf) {			
 			continue;
-		if (serviceId != -1 && serviceId != table.program_number)
+		}
+		if (serviceId != -1 && serviceId != table.program_number) {			
 			continue;
-		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+		}			
+		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC) {			
 			continue;
-		if (table.es_id != esId)
+		}
+		if (table.es_id != esId) {			
 			continue;
+		}
 		if (table.codec_type != CODEC_TYPE_H264_VIDEO) {
 			table.codec_type = CODEC_TYPE_H264_VIDEO;
 			table.init_data = initData;

@@ -4,6 +4,7 @@
 #include "CNodes.h"
 #include <iostream>
 #include <vector>
+#include <iomanip>
 
 #include <zlib.h>
 extern "C" {	//C로 만들어진 라이브러리를 참조 하기 위함.
