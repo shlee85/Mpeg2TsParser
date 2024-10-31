@@ -88,8 +88,14 @@ void TsParser::Init() {
 	PID_TABLE pid_table;
 	PCR_TABLE pcr_table;
 
-	unsigned int rf = 63000000;
+	unsigned int rf = 0;//63000000;
+#if 0
 	unsigned int serviceId = 256;	//입력 pid값 파싱할 때 굉장히 중요함.
+#else
+	unsigned int serviceId = -1; //입력 pid값 파싱할 때 굉장히 중요함.
+#endif
+
+	m_vec_pid_table.reserve(32);	//사이즈를 넉넉히 주고 포인터를 새롭게 추가 했을 때 내부적으로 변경되지 않도록 처리.
 
 	for (PID_TABLE& table : m_vec_pid_table) {
 		delete table.nodes;
@@ -105,18 +111,9 @@ void TsParser::Init() {
 	pid_table.nodes = new CNodes;
 	m_vec_pid_table.push_back(pid_table);
 
-	pid_table.rf = rf;
-	pid_table.pid = PID_PSIP;
-	pid_table.payload_unit_start = false;
-	pid_table.continuity_counter = 0;
-	pid_table.type = PID_TYPE_SECTION;
-	pid_table.nodes = new CNodes;
-	m_vec_pid_table.push_back(pid_table);
-
 	while (!feof(tsFile)) {
 		size_t readTs = fread(&buffer, 1, 188, tsFile);
 		//std::cout << "readTs : " << readTs << std::endl;
-		//std::cout << "bufferSize = " << buffer.length() << std::endl;
 
 		if (readTs == 0) {
 			if (feof(tsFile)) {
@@ -134,91 +131,27 @@ void TsParser::Init() {
 			break;
 		}
 
-		for (PROGRAM_TABLE& table : m_vec_program_table) {
-			//printf("g_program_table = [%hu]\n", table.program_number);
-			if (rf != table.rf)
-				continue;
-
-			if (serviceId != table.program_number)
-				continue;
-
-			std::stringstream strRet;
-			strRet << table.major_channel_number << "." << table.minor_channel_number << " "
-				<< table.name.c_str();
-
-			if (strRet.str() != strServiceDataTitle) {
-				strServiceDataTitle = strRet.str();
-				//LOGD("ATSC1.0 title: %s\n", strServiceDataTitle.c_str());
-			}
-		}
-
-		auto& v = m_vec_pid_table;
-		for (size_t i = v.size(); 0 < i; i--) {
-			if (rf != v[i - 1].rf)
-				continue;
-			if (v[i - 1].pid == PID_PAT || v[i - 1].pid == PID_PSIP)
-				continue;
-			bool bFind = false;
-			for (STREAM_TABLE& table : m_vec_stream_table) {
-				if (rf != table.rf)
-					continue;
-				if (v[i - 1].pid == table.elementary_pid) {
-					bFind = true;
-					break;
-				}
-			}
-			for (PROGRAM_TABLE& table : m_vec_program_table) {
-				if (rf != table.rf)
-					continue;
-				if (v[i - 1].pid == table.program_map_pid) {
-					bFind = true;
-					break;
-				}
-			}
-			for (MASTER_GUIDE_TABLE& table : m_vec_master_guide_table) {
-				if (rf != table.rf)
-					continue;
-				if (v[i - 1].pid == table.table_type_pid) {
-					bFind = true;
-					break;
-				}
-			}
-			if (!bFind) {
-				if (v[i - 1].type == PID_TYPE_PES) {
-					auto& vv = m_vec_pes_table;
-					for (size_t j = vv.size(); 0 < j; j--) {
-						if (rf != vv[j - 1].rf)
-							continue;
-						if (v[i - 1].pid == vv[j - 1].pid) {
-							//printf("Erase elementary PID 0x%x\n", vv[j - 1].pid);
-
-							vv.erase(vv.begin() + (int)j - 1);
-							break;
-						}
-					}
-				}
-				else {
-					//printf("Erase section PID 0x%x\n", v[i - 1].pid);
-				}
-				delete v[i - 1].nodes;
-				v.erase(v.begin() + (int)i - 1);
-			}
-		}
-
 		for (STREAM_TABLE& table : m_vec_stream_table) {
-			if (rf != table.rf)
+			//printf("stream type [0x%X], serviceId[%d]program[%d]\n", table.stream_type, serviceId, table.program_number);
+			if (rf != table.rf) {				
 				continue;
-			if (serviceId != table.program_number)
+			}
+			//Test용도 이므로 serviceId를 -1로 설정 하였음,
+			if (serviceId != -1 && serviceId != table.program_number) {				
 				continue;
-			if (table.stream_type != TS_VIDEO_TYPE_MPEG2 && table.stream_type != TS_VIDEO_TYPE_H264)
+			}
+			if (table.stream_type != TS_VIDEO_TYPE_MPEG2 && table.stream_type != TS_VIDEO_TYPE_H264
+				&& table.stream_type != STREAM_TYPE_MPEG_4_GENERIC && table.stream_type != STREAM_TYPE_ISO_14496_1_SL_PKT) {				
 				continue;
+			}
+
 			unsigned short elementary_pid = table.elementary_pid;
-			bool bFind = false;
+			bool bFind = false;			
 			for (PID_TABLE& table2 : m_vec_pid_table) {
 				if (rf != table2.rf || elementary_pid != table2.pid) continue;
 				bFind = true;
 				break;
-			}
+			}			
 			if (!bFind) {
 				g_SessionID = (g_SessionID > 100000) ? 0 : g_SessionID + 1;
 			#if 0
@@ -227,20 +160,31 @@ void TsParser::Init() {
 						g_SessionID, 0, 0, 0, 0, 0,
 						""); // AV RESET for Channel Change or Source Change
 			#endif
-				std::stringstream strXML;
-				strXML << "<reset demod='8vsb' rf='" << rf << "' sid='" << serviceId
-					<< "' sessionid='" << g_SessionID << "' />";
-				//dataCallback("reset", strXML);
-				std::cout << "dataCallback reset:" << strXML.str() << std::endl;
-				std::cout << "nodesVideo->reset!!!" << std::endl;
-				nodesVideo->reset();
-
+				nodesVideo->reset();				
 				PES_TABLE pes_table;
 				pes_table.rf = rf;
 				pes_table.pid = elementary_pid;
-				pes_table.type = (table.stream_type == TS_VIDEO_TYPE_MPEG2) ? PES_TYPE_MPEG2_VIDEO : PES_TYPE_H264_VIDEO;	//MPEG2가 아니면 H264로 처리 한다.
-				m_vec_pes_table.push_back(pes_table);
+				//pes_table.type = (table.stream_type == TS_VIDEO_TYPE_MPEG2) ? PES_TYPE_MPEG2_VIDEO : PES_TYPE_H264_VIDEO;	//MPEG2가 아니면 H264로 처리 한다.
+				if (table.stream_type == TS_VIDEO_TYPE_MPEG2) {
+					printf("table.stream_type == TS_VIDEO_TYPE_MPEG2\n");
+					pes_table.type = PES_TYPE_MPEG2_VIDEO;
 
+					//abort();
+				}
+				else if (table.stream_type == TS_VIDEO_TYPE_H264) {
+					printf("table.stream_type == TS_VIDEO_TYPE_H264\n");
+					pes_table.type = PES_TYPE_H264_VIDEO;
+
+					//abort();
+				}
+				else {
+					printf("### pes_table type is PES_TYPE_MPEG_4_GENERIC_H264_VIDEO ###\n");
+					pes_table.type = PES_TYPE_MPEG_4_GENERIC_H264_VIDEO;
+
+					//abort();
+				}
+				m_vec_pes_table.push_back(pes_table);
+								
 				PID_TABLE pid_table;
 				pid_table.rf = rf;
 				pid_table.pid = elementary_pid;
@@ -254,21 +198,25 @@ void TsParser::Init() {
 			}
 			break;
 		}
-
+		
 		//SelectAudioID_PMT(rf, serviceId);	//오디오 언어 선택 관련 처리 ( 국내향 / 미주향별 )
 		for (STREAM_TABLE& table : m_vec_stream_table) {
 			if (rf != table.rf) {				
 				continue;
 			}
-			if (serviceId != table.program_number) {			
+			if (serviceId != -1 && serviceId != table.program_number) {			
 				continue;
 			}
 			if (table.stream_type != TS_AUDIO_TYPE_AAC && table.stream_type != TS_AUDIO_TYPE_AC3 
-				&& table.stream_type != TS_AUDIO_TYPE_BSAC ) {			
+				&& table.stream_type != TS_AUDIO_TYPE_BSAC && table.stream_type != STREAM_TYPE_MPEG_4_GENERIC) {
 				continue;
 			}
+			if (table.codec_type != CODEC_TYPE_BSAC_AUDIO)
+				continue;
+
 			//if (std::to_string(table.elementary_pid) != GetSelectedAudioID())
 			//	continue;
+
 			unsigned short elementary_pid = table.elementary_pid;
 			bool bFind = false;
 			for (PID_TABLE& table2 : m_vec_pid_table) {
@@ -284,43 +232,40 @@ void TsParser::Init() {
 					g_av_callback(this, tunerId, rf, serviceId, "reset", 0, 0, 0, 0, 0, nullptr,
 						g_SessionID, 0, 0, 0, 0, 0,
 						""); // AV RESET for Channel Change or Source Change
-			#endif
-				std::stringstream strXML;
-				strXML << "<reset demod='8vsb' rf='" << rf << "' sid='" << serviceId
-					<< "' sessionid='" << g_SessionID << "' />";
-				//dataCallback("reset", strXML);
-				std::cout << "AUDIO?dataCallback reset:" << strXML.str() << std::endl;
+			#endif		
 				nodesAudio->reset();
 
-				auto& v2 = m_vec_pes_table;
-				for (size_t i = v2.size(); 0 < i; i--) {
-					if (rf != v2[i - 1].rf)
-						continue;
-					if (PES_TYPE_AC3_AUDIO == v2[i - 1].type ||
-						PES_TYPE_BSAC_AUDIO == v2[i - 1].type ||
-						PES_TYPE_AAC_AUDIO == v2[i - 1].type) {
-						auto& vv = m_vec_pid_table;
-						for (size_t j = vv.size(); 0 < j; j--) {
-							if (rf != vv[j - 1].rf)
-								continue;
-							if (PID_TYPE_PES != vv[j - 1].type)
-								continue;
-							if (v2[i - 1].pid == vv[j - 1].pid) {
-								//printf("Erase audio elementary PID 0x%x\n", vv[j - 1].pid);
-								delete vv[j - 1].nodes;
-								vv.erase(vv.begin() + (int)j - 1);
-								break;
-							}
-						}
-						v2.erase(v2.begin() + (int)i - 1);
-						break;
-					}
-				}
+				
+				//auto& v2 = m_vec_pes_table;
+				//for (size_t i = v2.size(); 0 < i; i--) {
+				//	if (rf != v2[i - 1].rf)
+				//		continue;
+				//	if (PES_TYPE_AC3_AUDIO == v2[i - 1].type ||
+				//		PES_TYPE_BSAC_AUDIO == v2[i - 1].type ||
+				//		PES_TYPE_AAC_AUDIO == v2[i - 1].type || 
+				//		PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO == v2[i - 1].type) {
+				//		auto& vv = m_vec_pid_table;
+				//		for (size_t j = vv.size(); 0 < j; j--) {
+				//			if (rf != vv[j - 1].rf)
+				//				continue;
+				//			if (PID_TYPE_PES != vv[j - 1].type)
+				//				continue;
+				//			if (v2[i - 1].pid == vv[j - 1].pid) {
+				//				printf("Erase audio elementary PID 0x%x\n", vv[j - 1].pid);
+				//				delete vv[j - 1].nodes;
+				//				vv.erase(vv.begin() + (int)j - 1);
+				//				break;
+				//			}
+				//		}
+				//		v2.erase(v2.begin() + (int)i - 1);
+				//		break;
+				//	}
+				//}
 
 				PES_TABLE pes_table;
 				pes_table.rf = rf;
 				pes_table.pid = elementary_pid;
-				pes_table.type = (table.stream_type == TS_AUDIO_TYPE_AC3) ? PES_TYPE_AC3_AUDIO : PES_TYPE_BSAC_AUDIO;
+				pes_table.type = (table.stream_type == TS_AUDIO_TYPE_AC3) ? PES_TYPE_AC3_AUDIO : PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO;
 					//(table.stream_type == TS_AUDIO_TYPE_EAC3) ? PES_TYPE_EAC3_AUDIO : PES_TYPE_AAC_AUDIO;
 				m_vec_pes_table.push_back(pes_table);
 
@@ -362,68 +307,6 @@ void TsParser::Init() {
 				m_vec_pid_table.push_back(pid_table);
 
 				//printf("Add PMT PID 0x%x\n", program_map_pid);
-			}
-		}
-
-		for (MASTER_GUIDE_TABLE& table : m_vec_master_guide_table) {
-			if (rf != table.rf)
-				continue;
-			if (table.table_type < 0x100)
-				continue;
-			if (0x17f < table.table_type)
-				continue;
-			unsigned short table_type_pid = table.table_type_pid;
-			bool bFind = false;
-			for (PID_TABLE& table3 : m_vec_pid_table) {
-				if (rf != table3.rf)
-					continue;
-				if (table_type_pid != table3.pid)
-					continue;
-				bFind = true;
-				break;
-			}
-			if (!bFind) {
-				PID_TABLE pid_table;
-				pid_table.rf = rf;
-				pid_table.pid = table_type_pid;
-				pid_table.payload_unit_start = false;
-				pid_table.continuity_counter = 0;
-				pid_table.type = PID_TYPE_SECTION;
-				pid_table.nodes = new CNodes;
-				m_vec_pid_table.push_back(pid_table);
-
-				//printf("Add EIT PID 0x%x\n", table_type_pid);
-			}
-		}
-
-		for (MASTER_GUIDE_TABLE& table : m_vec_master_guide_table) {
-			if (rf != table.rf)
-				continue;
-			if (table.table_type < 0x200)
-				continue;
-			if (0x27f < table.table_type)
-				continue;
-			unsigned short table_type_pid = table.table_type_pid;
-			bool bFind = false;
-			for (PID_TABLE& table4 : m_vec_pid_table) {
-				if (rf != table4.rf)
-					continue;
-				if (table_type_pid != table4.pid)
-					continue;
-				bFind = true;
-				break;
-			}
-			if (!bFind) {
-				PID_TABLE pid_table;
-				pid_table.rf = rf;
-				pid_table.pid = table_type_pid;
-				pid_table.payload_unit_start = false;
-				pid_table.continuity_counter = 0;
-				pid_table.type = PID_TYPE_SECTION;
-				pid_table.nodes = new CNodes;
-				m_vec_pid_table.push_back(pid_table);
-
-				printf("Add ETT PID 0x%x\n", table_type_pid);
 			}
 		}
 
@@ -472,6 +355,7 @@ void TsParser::Init() {
 						pcr |= (bb.get2() >> 15) & 0x0001;
 						adaptation_field_length -= 6;
 
+						//파싱시 필수
 						for (PCR_TABLE& table : m_vec_pcr_table) {
 							if (rf != table.rf)
 								continue;
@@ -518,9 +402,8 @@ void TsParser::Init() {
 										nodesVideo->reset();
 										break;
 									case PES_TYPE_AC3_AUDIO:
-									case PES_TYPE_AAC_AUDIO:
-									case PES_TYPE_BSAC_AUDIO:
-										std::cout << "PES_TYPE_AC3_AUDIO | PES_TYPE_AAC_AUDIO | PES_TYPE_BSAC_AUDIO" << std::endl;
+									case PES_TYPE_AAC_AUDIO:									
+										std::cout << "PES_TYPE_AC3_AUDIO | PES_TYPE_AAC_AUDIO" << std::endl;
 										nodesAudio->reset();
 										break;							
 										
@@ -551,16 +434,15 @@ void TsParser::Init() {
 								}
 
 								if (table.nodes->len()) {
-									//todo. processSectionData() 구현.
-									processSectionData(rf, serviceId, pid, table.nodes->get(0, table.nodes->len()), table.nodes->len());
+									//todo. processSectionData() 구현.									
+									processSectionData(rf, serviceId, pid, table.nodes->get(0, table.nodes->len()), table.nodes->len());									
 								}
 
 								break;
 							}
-							case PID_TYPE_PES: {
-								//std::cout << "PID_TYPE_PES" << std::endl;
+							case PID_TYPE_PES: {								
 								if (table.nodes->len()) {
-									//todo. processPesData() 구현.
+									//todo. processPesData() 구현.									
 									processPesData(rf, serviceId, pid, table.nodes->get(0, table.nodes->len()), table.nodes->len());
 								}
 								break;
@@ -571,9 +453,23 @@ void TsParser::Init() {
 
 							unsigned int len = bb.remain();
 							unsigned char* data = bb.gets(len);
+							//printf("pid = [0x%x], [%p]\n",pid, table.nodes);
 
-							table.nodes->reset();
-							table.nodes->add(0, data, len, 0);
+							//table을 다시 재 접근 해서 처리 하도록 하는 부분. 
+							//for (PID_TABLE& table : m_vec_pid_table) {
+							//	//std::cout << "mVecPidTable!" << std::endl;
+							//	//printf("rf[%d] table.rf[%d] , pid[%d] table.pid[%d]\n", rf, table.rf, pid, table.pid);
+
+							//	if (rf == table.rf && pid == table.pid) {
+
+							//		table.nodes->reset();
+							//		printf("1111111111\n");
+							//		table.nodes->add(0, data, len, 0);
+							//		printf("222222222222\n");
+							//	}
+							//}
+							table.nodes->reset();							
+							table.nodes->add(0, data, len, 0);							
 						}
 						else if (table.payload_unit_start) {
 							unsigned int len = bb.remain();
@@ -594,7 +490,7 @@ void TsParser::Init() {
 			count = 0;
 		}
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}//while
 }
 #pragma warning(pop)
@@ -671,6 +567,21 @@ static unsigned short calcCRC16(const std::string& strData) {
 
 void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigned char* ucData, unsigned int usLength) {
 	CByteBuffer bb(ucData, usLength);
+#if 0
+	if (pid == 0x11)
+	{
+		static FILE* vfp = NULL;
+		if (!vfp)
+		{
+			fopen_s(&vfp, "v.pes", "wb");
+		}
+
+		if (vfp)
+		{
+			fwrite(ucData, 1, usLength, vfp);
+		}
+	}
+#endif
 	unsigned int packet_start_code_prefix = bb.get3();
 	if (packet_start_code_prefix != 0x000001) {
 		printf("Not PES packet start code prefix = 0x%x\n", packet_start_code_prefix);
@@ -807,24 +718,26 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 				processH264VideoEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
 				break;
 			case PES_TYPE_MPEG2_VIDEO: {
-				//std::cout << "PES_TYPE_MPEG2_VIDEO" << std::endl;
+				std::cout << "PES_TYPE_MPEG2_VIDEO" << std::endl;
 				processMpeg2VideoEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
 
 				break;
 			}
+			case PES_TYPE_MPEG_4_GENERIC_H264_VIDEO:
+				//printf("PES_TYPE_MPEG_4_GENERIC_H264_VIDEO\n");
+				processMpeg4GenericEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
+				break;
 			case PES_TYPE_EAC3_AUDIO:
 				break;
 			case PES_TYPE_AC3_AUDIO:
 				processAc3AudioEsData(rf, serviceId, pts, data, len, buffer_time_us);
 				break;
 			case PES_TYPE_AAC_AUDIO: {
-				//std::cout << "PES_TYPE_AAC_AUDIO || AC3" << std::endl;
+				std::cout << "PES_TYPE_AAC_AUDIO || AC3" << std::endl;
 				processAacAudioEsData(rf, serviceId, dts ? dts : pts, data, len, buffer_time_us);
 
 				break;
-			}case PES_TYPE_BSAC_AUDIO:
-				//std::cout << "PES_TYPE_BSAC_AUDIO" << std::endl;
-				break;
+			}
 			default:
 				std::cout << "table type = " << table.type << std::endl;
 				break;
@@ -835,6 +748,9 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 
 void TsParser::processSectionData(int rf, int serviceId, unsigned short pid, unsigned char* ucData,
 	unsigned int usLength) {
+#if 0
+	printBinary("section", ucData, usLength);
+#endif
 	CByteBuffer bb(ucData, usLength);
 	unsigned char table_id = bb.get();
 	unsigned short b = bb.get2();
@@ -846,60 +762,20 @@ void TsParser::processSectionData(int rf, int serviceId, unsigned short pid, uns
 
 		return;
 	}
-
+	
 	switch (table_id) {
-	case TS_TABLE_ID_PAT: {
+	case TS_TABLE_ID_PAT:
 		processPatData(rf, serviceId, pid, ucData, usLength);
-
 		break;
-	}
-
-	case TS_TABLE_ID_PMT: {	
+	case TS_TABLE_ID_PMT:
 		processPmtData(rf, serviceId, pid, ucData, usLength);
-
 		break;
-	}
-
-	case TS_TABLE_ID_MGT: {
-//		processMgtData(rf, serviceId, pid, ucData, usLength);
-
+	case TS_TABLE_ID_ODT:
+		processOdtData(rf, serviceId, pid, ucData, usLength);
 		break;
-	}
-/*
-	case TABLE_ID_TVCT: {
-		processTvctData(rf, serviceId, pid, ucData, usLength);
-
-		break;
-	}
-
-	case TABLE_ID_RRT: {
-		processRrtData(rf, serviceId, pid, ucData, usLength);
-
-		break;
-	}
-
-	case TABLE_ID_EIT: {
-		processEitData(rf, serviceId, pid, ucData, usLength);
-
-		break;
-	}
-
-	case TABLE_ID_ETT: {
-		processEttData(rf, serviceId, pid, ucData, usLength);
-
-		break;
-	}
-
-	case TABLE_ID_STT: {
-		processSttData(rf, serviceId, pid, ucData, usLength);
-
-		break;
-	}
-*/
-
 	default:
 		break;
-	}
+	}	
 }
 
 void TsParser::processPatData(int rf, int serviceId, unsigned short pid, unsigned char* ucData,
@@ -920,15 +796,7 @@ void TsParser::processPatData(int rf, int serviceId, unsigned short pid, unsigne
 			bErase = true;
 		}
 	}
-	if (bErase) {
-		auto& _pcr_table = m_vec_pcr_table;
-		for (size_t i = _pcr_table.size(); 0 < i; i--) {
-			if (rf == _pcr_table[i - 1].rf) {
-				//printf("Erase pcr pcr_pid 0x%x\n", v[i - 1].pcr_pid);
-
-				_pcr_table.erase(_pcr_table.begin() + (int)i - 1);
-			}
-		}
+	if (bErase) {		
 		auto& vv = m_vec_stream_table;
 		for (size_t i = vv.size(); 0 < i; i--) {
 			if (rf == vv[i - 1].rf) {
@@ -936,23 +804,7 @@ void TsParser::processPatData(int rf, int serviceId, unsigned short pid, unsigne
 
 				vv.erase(vv.begin() + (int)i - 1);
 			}
-		}
-		auto& vvv = m_vec_master_guide_table;
-		for (size_t i = vvv.size(); 0 < i; i--) {
-			if (rf == vvv[i - 1].rf) {
-				//printf("Erase table table_type 0x%x table_type_pid 0x%x\n", vvv[i - 1].table_type, vvv[i - 1].table_type_pid);
-
-				vvv.erase(vvv.begin() + (int)i - 1);
-			}
-		}
-		auto& vvvv = m_vec_epg_table;
-		for (size_t i = vvvv.size(); 0 < i; i--) {
-			if (rf == vvvv[i - 1].rf) {
-				//printf("Erase EPG source_id 0x%x event_id 0x%x\n", vvvv[i - 1].source_id, vvvv[i - 1].event_id);
-
-				vvvv.erase(vvvv.begin() + (int)i - 1);
-			}
-		}
+		}		
 	}
 
 	CByteBuffer bb(ucData, usLength);
@@ -1001,7 +853,7 @@ void TsParser::processPatData(int rf, int serviceId, unsigned short pid, unsigne
 			program_table.rf = rf;
 			program_table.program_number = program_number;
 			program_table.program_map_pid = program_map_pid;
-			program_table.major_channel_number = rf;//frequency2Number(rf);
+			program_table.major_channel_number = rf;
 			program_table.minor_channel_number = i + 1;
 			memset(&program_table.short_name, 0, sizeof(program_table.short_name));
 			program_table.name = "";
@@ -1014,7 +866,7 @@ void TsParser::processPatData(int rf, int serviceId, unsigned short pid, unsigne
 			std::cout << "g_program_table push back" << std::endl;
 			m_vec_program_table.push_back(program_table);
 
-			//printf("Add program program_number %d\n", program_number);
+			printf("Add program program_number %d\n", program_number);
 		}
 	}
 
@@ -1284,6 +1136,7 @@ void processCaptionDescriptorData(int rf, int serviceId, unsigned char* ucData,
 
 void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigned char* ucData, unsigned int usLength) {
 	unsigned short program_number = 0;
+	//printBinary("pmt", ucData, usLength);
 	for (PROGRAM_TABLE& table : m_vec_program_table) {
 		if (rf != table.rf)
 			continue;
@@ -1300,18 +1153,7 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 	crc32 = crc32 << 8 | ucData[usLength - 3];
 	crc32 = crc32 << 8 | ucData[usLength - 2];
 	crc32 = crc32 << 8 | ucData[usLength - 1];
-	auto& v = m_vec_pcr_table;
-	for (size_t i = v.size(); 0 < i; i--) {
-		if (rf != v[i - 1].rf)
-			continue;
-		if (program_number != v[i - 1].program_number)
-			continue;
-		if (crc32 != v[i - 1].crc32) {
-			//printf("Erase pcr pcr_pid 0x%x\n", v[i - 1].pcr_pid);
 
-			v.erase(v.begin() + (int)i - 1);
-		}
-	}
 	auto& vv = m_vec_stream_table;
 	for (size_t i = vv.size(); 0 < i; i--) {
 		if (rf != vv[i - 1].rf)
@@ -1342,7 +1184,11 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 	unsigned char last_section_number = bb.get();
 
 	unsigned short pcr_pid = bb.get2() & (unsigned short)0x1fff;
+	unsigned short program_info_length = bb.get2() & (unsigned short)0x03ff;
+
 	bool bFind = false;
+
+	//h264파싱시 필수
 	for (PCR_TABLE& table : m_vec_pcr_table) {
 		if (rf != table.rf)
 			continue;
@@ -1363,40 +1209,32 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 		pcr_table.buffer_time_us = 0;
 		pcr_table.crc32 = crc32;
 		m_vec_pcr_table.push_back(pcr_table);
-
-		//printf("Add pcr pcr_pid 0x%x\n", pcr_pid);
+	//printf("Add pcr pcr_pid 0x%x\n", pcr_pid);
 	}
-	unsigned short program_info_length = bb.get2() & (unsigned short)0x03ff;
+	
 	if (program_info_length) {
 		for (CByteBuffer pp(bb.gets(program_info_length), program_info_length); pp.remain();) {
 			unsigned char descriptor_tag = pp.get();
 			unsigned char descriptor_length = pp.get();
+
 			if (descriptor_tag == DESCRIPTOR_TAG_CONTENT_ADVISORY) {
 				std::vector<CONTENT_ADVISORY_TABLE> content_advisory_table;
 				processContentAdvisoryDescriptorData(pp.gets(descriptor_length),
-					descriptor_length, content_advisory_table);
-				std::string rating = processContentAdvisoryToString(rf, content_advisory_table);
-				if (serviceId == program_number) {
-					std::stringstream ret;
-					ret << "<rating>" << std::endl;
-					ret << R"(<info src="PMT" demod="8vsb" rf=")" << rf << "\" sid=\""
-						<< serviceId << "\" value=\"" << rating << "\"/>" << std::endl;
-					ret << "</rating>";
-					//dataCallback("rating", ret);			
-					//printf("dataCallback rating = [%s]\n", ret);
-					std::cout << "dataCallback rating = " << ret.str() << std::endl;
-				}
+					descriptor_length, content_advisory_table);				
 			}
 			else {
 				pp.gets(descriptor_length);
-			}
+			}			
 		}
 	}
+	
 	for (; 4 < bb.remain();) {
 		unsigned char stream_type = bb.get();
 		unsigned short elementary_pid = bb.get2() & 0x1fff;
 		unsigned short es_info_length = bb.get2() & 0x03ff;
-		ISO_639_LANGUAGE_TABLE iso_639_language_table;	
+		unsigned short es_id = 0;
+
+		ISO_639_LANGUAGE_TABLE iso_639_language_table;
 		if (es_info_length) {
 			CByteBuffer ee(bb.gets(es_info_length), es_info_length);
 			for (; ee.remain();) {
@@ -1415,72 +1253,146 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 							ee.gets(descriptor_length),
 							descriptor_length);
 					break;
-
-				default:
+				case DESCRIPTOR_TAG_SYNC_LAYER:
+					//printf("DESCRIPTOR_TAG_SYNC_LAYER\n");
+					processSyncLayerDescriptorData(ee.gets(descriptor_length), descriptor_length, &es_id);
+					break;
+				default:					
 					ee.gets(descriptor_length);
 					break;
 				}
 			}
 		}
+		
+		//DMB로 인한 추가
+		bool bFind2 = false;		
+		if (stream_type == STREAM_TYPE_ISO_14496_1_SL_PKT) {
+			for (PID_TABLE& table : m_vec_pid_table) {
+				if (rf != table.rf)
+					continue;
+				if (elementary_pid != table.pid)
+					continue;
+				bFind2 = true;
+				break;
+			}
 
-		bool bFind2 = false;
-		for (STREAM_TABLE& table : m_vec_stream_table) {
-			if (rf != table.rf)
-				continue;
-			if (program_number != table.program_number)
-				continue;
-			if (elementary_pid != table.elementary_pid)
-				continue;
-			if (stream_type != table.stream_type)
-				continue;
-			bFind2 = true;
+			if (!bFind2) {
+				PID_TABLE pid_table;
+				pid_table.rf = rf;
+				pid_table.pid = elementary_pid;
+				pid_table.payload_unit_start = false;
+				pid_table.continuity_counter = 0;
+				pid_table.type = PID_TYPE_SECTION;
+				pid_table.nodes = new CNodes;
+				
+				m_vec_pid_table.push_back(pid_table);
+				//m_vec_pid_table.emplace_back(pid_table);				
+
+				printf("Add ISO14496-1 SL-packetized elementary_pid 0x%x stream_type 0x%x %p\n", elementary_pid, stream_type, pid_table.nodes);
+			}
+		}
+		else {
+			for (STREAM_TABLE& table : m_vec_stream_table) {
+				if (rf != table.rf)
+					continue;
+				if (program_number != table.program_number)
+					continue;
+				if (elementary_pid != table.elementary_pid)
+					continue;
+				if (stream_type != table.stream_type)
+					continue;
+				bFind2 = true;
+				break;
+			}
+			if (!bFind2) {
+				std::string language;
+				unsigned char audio_type = 0;
+
+				language = iso_639_language_table.iso_639_language_code;
+				audio_type = iso_639_language_table.audio_type;
+
+				STREAM_TABLE stream_table;
+				stream_table.rf = rf;
+				stream_table.program_number = program_number;
+				stream_table.elementary_pid = elementary_pid;
+				stream_table.stream_type = stream_type;
+				stream_table.language = language;
+				stream_table.audio_type = audio_type;
+				stream_table.crc32 = crc32;
+				m_vec_stream_table.push_back(stream_table);
+
+				printf("Add stream elementary_pid 0x%x stream_type 0x%x language %s\n", elementary_pid, stream_type, language.c_str());
+			}
+		}
+	}
+}
+
+void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts,
+	unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us) {
+
+	unsigned char* buf = ucData;
+	unsigned int idx = 0;
+
+	usLength -= 9;
+	buf += 9;
+
+	const char prefix[] = { 0x0, 0x0, 0x0, 0x1 };
+	static FILE* vfp = NULL;
+	//printf("value = [%d]\n", (buf[0] & 0x1f));
+
+	static FILE* vfp2 = NULL;
+	if (!vfp2)
+	{
+		vfp2 = fopen("video_shlee.es", "wb");
+	}
+	if (vfp2)
+	{
+		fwrite(ucData, 1, usLength, vfp2);
+	}
+
+	switch (buf[0] & 0x1f) {
+		case 5: {
+			if (!vfp) {
+				vfp = fopen("video.es", "wb");
+				if (vfp) {
+					printf("fopen file success\n");
+				}
+				else {
+					printf("fopen fail [%s]\n", strerror(errno));
+				}
+			}
+
+			std::string initData;
+			for (STREAM_TABLE& table : m_vec_stream_table) {
+				if (rf != table.rf)
+					continue;
+				if (serviceId != -1 && serviceId != table.program_number)
+					continue;
+				if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+					continue;
+				if (table.codec_type != CODEC_TYPE_H264_VIDEO)
+					continue;
+				initData = table.init_data;
+				break;
+			}
+
+			if (vfp) {
+				fwrite(initData.c_str(), 1, initData.length(), vfp);
+				fwrite(prefix, 1, sizeof(prefix), vfp);
+				fwrite(buf, 1, usLength, vfp);
+				//printf("write!!!\n");
+			}
+
 			break;
 		}
-		if (!bFind2) {
-			std::string language;
-			unsigned char audio_type = 0;			
-			
-			language = iso_639_language_table.iso_639_language_code;
-			audio_type = iso_639_language_table.audio_type;			
+		default: {
+			if (vfp) {
+				fwrite(prefix, 1, sizeof(prefix), vfp);
+				fwrite(buf, 1, usLength, vfp);
+			}
 
-			STREAM_TABLE stream_table;
-			stream_table.rf = rf;
-			stream_table.program_number = program_number;
-			stream_table.elementary_pid = elementary_pid;
-			stream_table.stream_type = stream_type;
-			stream_table.language = language;
-			stream_table.audio_type = audio_type;
-			stream_table.crc32 = crc32;
-			m_vec_stream_table.push_back(stream_table);
-
-			//printf("Add stream elementary_pid 0x%x stream_type 0x%x language %s\n", elementary_pid, stream_type, language.c_str());
+			break;
 		}
-	}
-
-	std::stringstream strXML;
-	strXML << "<ainfo>" << std::endl;
-	int nCount = 0;
-	for (STREAM_TABLE& table : m_vec_stream_table) {
-		if (table.rf != rf)
-			continue;
-		if (table.program_number != serviceId)
-			continue;
-		if (table.stream_type != TS_AUDIO_TYPE_AAC && table.stream_type != TS_AUDIO_TYPE_BSAC)
-			continue;
-		strXML << "<info demod='8vsb' rf='" << rf << "' sid='" << serviceId << "' lang='"
-			<< iso639((char*)table.language.c_str());
-		strXML << "' id='" << table.elementary_pid;
-		strXML << "' codecs='" << "bsac";
-		strXML << "' commentary='" << (table.audio_type == 3 ? 1 : 0);
-		strXML << "' select=''/>";
-		//strXML << ((std::to_string(table.elementary_pid) == GetSelectedAudioID()) ? 1 : 0)
-		//	<< "'/>" << std::endl;
-		nCount++;
-	}
-	strXML << "</ainfo>" << std::endl;
-	if (nCount > 0) {
-		//dataCallback("ainfo", strXML);
-		//std::cout << "dataCallback ainfo = " << strXML.str() << std::endl;
 	}
 }
 
@@ -2106,5 +2018,190 @@ void TsParser::processAc3AudioEsData(int rf, int serviceId, unsigned long long p
 	nodesAudio->reset();
 	nodesAudio->add(0, nodesTemp->get(0, nodesTemp->len()), nodesTemp->len(), 0);
 	delete nodesTemp;
+}
+
+void TsParser::printBinary(const char* name, unsigned char* data, unsigned int len) {
+	std::stringstream ret;
+	char buff[16];
+	for (unsigned int i = 0; i < len; i++) {
+		snprintf(buff, 16, "0x%02X, ", data[i]);
+		ret << buff;
+	}
+	printf("%s len=%d %s\n", name, len, ret.str().c_str());
+}
+
+void TsParser::processOdtData(int rf, int serviceId, unsigned short pid, unsigned char* ucData,
+	unsigned int usLength) {
+	//printBinary("Od", ucData, usLength);
+
+	unsigned int crc32 = ucData[usLength - 4];
+	crc32 = crc32 << 8 | ucData[usLength - 3];
+	crc32 = crc32 << 8 | ucData[usLength - 2];
+	crc32 = crc32 << 8 | ucData[usLength - 1];
+
+	CByteBuffer bb(ucData, usLength - 4);
+	unsigned char table_id = bb.get();
+	if (table_id != TS_TABLE_ID_ODT) {
+		printf("Not ODT table id = 0x%x\n", table_id);
+		return;
+	}
+	unsigned short b = bb.get2();
+	unsigned char section_syntax_indicator = b >> 15 & 0x0001;
+	unsigned short section_length = b >> 0 & 0x0fff;
+	unsigned short transport_stream_id = bb.get2();
+	b = bb.get();
+	unsigned char version_number = b >> 1 & 0x1f;
+	unsigned char current_next_indicator = b >> 0 & 0x01;
+	unsigned char section_number = bb.get();
+	unsigned char last_section_number = bb.get();
+
+	for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
+		unsigned char descriptor_tag = pp.get();
+		unsigned char descriptor_length = pp.get();
+		if (descriptor_tag == DESCRIPTOR_TAG_OBJECT) {
+			processObjectDescriptorData(pp.gets(descriptor_length), descriptor_length, rf, serviceId);
+		}
+		else {
+			pp.gets(descriptor_length);
+		}
+	}
+}
+
+void TsParser::processSyncLayerDescriptorData(unsigned char* ucData, unsigned int usLength, unsigned short* esId) {
+	CByteBuffer bb(ucData, usLength);
+	if (esId) *esId = bb.get2();
+}
+
+void TsParser::processObjectDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId) {
+	CByteBuffer bb(ucData, usLength);
+	unsigned short b = bb.get2();
+	unsigned char urlFlag = (b >> 5) & 0x01;
+	if (urlFlag == 0) {
+		for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
+			unsigned char descriptor_tag = pp.get();
+			unsigned char descriptor_length = pp.get();
+			if (descriptor_tag == DESCRIPTOR_TAG_ELEMENTARY_STREAM) {				
+				processElementaryStreamDescriptorData(pp.gets(descriptor_length), descriptor_length, rf, serviceId);
+			}
+			else {
+				pp.gets(descriptor_length);
+			}
+		}
+	}
+}
+
+void TsParser::processElementaryStreamDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId) {
+	CByteBuffer bb(ucData, usLength);
+	unsigned short esId = bb.get2();
+	unsigned char b = bb.get();
+	unsigned char streamDependenceFlag = (b >> 7) & 0x01;
+	unsigned char urlFlag = (b >> 6) & 0x01;
+	unsigned char ocrStreamFlag = (b >> 5) & 0x01;
+	if (streamDependenceFlag) {
+		bb.get2();
+	}
+	if (urlFlag) {
+		bb.gets(bb.get());
+	}
+	if (ocrStreamFlag) {
+		bb.get2();
+	}
+
+	unsigned char descriptor_tag = bb.get();
+	unsigned char descriptor_length = bb.get();
+	if (descriptor_tag == DESCRIPTOR_TAG_DECODER_CONFIG) {
+		processDecoderConfigDescriptorData(bb.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
+	}
+}
+
+void TsParser::processDecoderConfigDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId) {
+	CByteBuffer bb(ucData, usLength);
+	unsigned char objectTypeIndicator = bb.get();
+	unsigned char b = bb.get();
+	unsigned char streamType = (b >> 2) & 0x3f;
+	bb.get3();
+	unsigned int maxBitRate = bb.get4();
+	unsigned int avgBitRate = bb.get4();
+
+	for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
+		unsigned char descriptor_tag = pp.get();
+		unsigned char descriptor_length = pp.get();
+		if (descriptor_tag == DESCRIPTOR_TAG_DECODER_SPECIFIC_INFO) {
+			if (streamType == 0x04) {
+				//printf("processH264InfoData\n");
+				processH264InfoData(pp.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
+			}
+			else if (streamType == 0x05) {
+				processBsacInfoData(pp.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
+			}
+			else {
+				pp.gets(descriptor_length);
+			}
+		}
+		else {
+			pp.gets(descriptor_length);
+		}
+	}
+}
+
+void TsParser::processH264InfoData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId) {
+	const char prefix[] = { 0x00, 0x00, 0x00, 0x01 };
+	CByteBuffer bb(ucData, usLength);
+	bb.gets(5);
+	std::string initData;
+	unsigned char numSps = bb.get() & 0x1f;
+	for (int i = 0; i < numSps; i++) {
+		unsigned short sizeSps = bb.get2();
+		initData += std::string((prefix), sizeof(prefix)) + std::string((const char*)bb.gets(sizeSps), sizeSps);
+	}
+	unsigned char numPps = bb.get() & 0x1f;
+	for (int i = 0; i < numPps; i++) {
+		unsigned short sizePps = bb.get2();
+		initData += std::string((prefix), sizeof(prefix)) + std::string((const char*)bb.gets(sizePps), sizePps);
+	}
+
+	for (STREAM_TABLE& table : m_vec_stream_table) {
+		if (rf != table.rf)
+			continue;
+		if (serviceId != -1 && serviceId != table.program_number)
+			continue;
+		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+			continue;
+		if (table.es_id != esId)
+			continue;
+		if (table.codec_type != CODEC_TYPE_H264_VIDEO) {
+			table.codec_type = CODEC_TYPE_H264_VIDEO;
+			table.init_data = initData;
+
+			printf("Add video info to elementary_pid 0x%x es_id 0x%x\n", table.elementary_pid, table.es_id);
+		}
+		break;
+	}
+}
+
+void TsParser::processBsacInfoData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId) {
+	CByteBuffer bb(ucData, usLength);
+	bb.gets(5);
+	std::string initData;
+
+	for (STREAM_TABLE& table : m_vec_stream_table) {
+		if (rf != table.rf)
+			continue;
+		if (serviceId != -1 && serviceId != table.program_number)
+			continue;
+		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+			continue;
+		if (table.es_id != esId)
+			continue;
+		if (table.codec_type != CODEC_TYPE_BSAC_AUDIO) {
+			table.codec_type = CODEC_TYPE_BSAC_AUDIO;
+			table.init_data = initData;
+
+			printf("Add audio info to elementary_pid 0x%x es_id 0x%x\n", table.elementary_pid, table.es_id);
+		}
+		break;
+	}
+
+	//printBinary("BSAC-init", ucData, usLength);
 }
 #pragma warning(pop)

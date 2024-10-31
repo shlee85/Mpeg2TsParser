@@ -1080,7 +1080,12 @@ void Player::mainLoop() {
 
 	//MW 코드 실행 ( CB등록 및 실행 )
 	//std::string sourcePath = "C:\\Work\\STREAM\\ts\\test2.ts";	//mpeg2
-	std::string sourcePath = "C:\\Work\\STREAM\\ts\\av_s1.ts";		//h264
+
+#if 0
+	std::string sourcePath = "C:\\Work\\STREAM\\ts\\av_s1.ts";	//h264
+#else	
+	std::string sourcePath = "C:\\Work\\STREAM\\dmb\\myMBC.ts";		//DMB
+#endif
 	std::string outputPath = "ouputs/parser.txt";
 	TsParser *ts = new TsParser(sourcePath, outputPath);
 	ts->startThread(AT3APP_AvCallbackSub);

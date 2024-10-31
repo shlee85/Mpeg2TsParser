@@ -40,6 +40,19 @@ private:
 	void proccessMpeg2VideoEsUserData(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
 	void proccessMpeg2VideoEsUserDataReorder(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
 	void process_cc_data(unsigned char frame_type, unsigned char* ucData, unsigned int usLength);
+
+	//DMB°ü·Ã
+	void processOdtData(int rf, int serviceId, unsigned short pid, unsigned char* ucData, unsigned int usLength);
+	void printBinary(const char* name, unsigned char* data, unsigned int len);
+	void processH264InfoData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId);
+	void processBsacInfoData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId);
+	void processDecoderConfigDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId);
+	void processElementaryStreamDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId);
+	void processObjectDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId);
+	void processSyncLayerDescriptorData(unsigned char* ucData, unsigned int usLength, unsigned short* esId);
+
+	void processMpeg4GenericEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
+
 	
 	int g_SessionID = -1;
 

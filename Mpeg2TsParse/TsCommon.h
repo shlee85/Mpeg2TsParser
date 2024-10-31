@@ -23,6 +23,7 @@ extern "C" {	//C로 만들어진 라이브러리를 참조 하기 위함.
 //PSI
 #define TS_TABLE_ID_PAT 0x00
 #define TS_TABLE_ID_PMT 0x02
+#define TS_TABLE_ID_ODT 0x05
 #define TS_TABLE_ID_MGT 0xc7
 #define TS_TABLE_ID_TVCT 0xc8
 #define TS_TABLE_ID_RRT 0xca
@@ -35,6 +36,8 @@ extern "C" {	//C로 만들어진 라이브러리를 참조 하기 위함.
 #define TS_AUDIO_TYPE_AC3 0x81
 #define TS_AUDIO_TYPE_EAC3 0x87
 #define TS_AUDIO_TYPE_BSAC 0x11
+#define STREAM_TYPE_MPEG_4_GENERIC      0x12 
+#define STREAM_TYPE_ISO_14496_1_SL_PKT  0x13
 
 //VIDEO
 #define TS_VIDEO_TYPE_MPEG2 0x02
@@ -46,11 +49,26 @@ extern "C" {	//C로 만들어진 라이브러리를 참조 하기 위함.
 
 #define PSI_ONLY_PROGRAM_TIMEOUT    (1.5 * 1000 * 1000)
 
+//DMB
+#define DESCRIPTOR_TAG_ISO_639_LANGUAGE 0x0a
+#define DESCRIPTOR_TAG_AC3_AUDIO 0x81
+#define DESCRIPTOR_TAG_EAC3_AUDIO 0xCC
+#define DESCRIPTOR_TAG_CAPTION 0x86
+#define DESCRIPTOR_TAG_CONTENT_ADVISORY 0x87
+#define DESCRIPTOR_TAG_OBJECT 0x01
+#define DESCRIPTOR_TAG_INITIAL_OBJECT 0x02
+#define DESCRIPTOR_TAG_ELEMENTARY_STREAM 0x03
+#define DESCRIPTOR_TAG_DECODER_CONFIG 0x04
+#define DESCRIPTOR_TAG_DECODER_SPECIFIC_INFO 0x05
+#define DESCRIPTOR_TAG_SYNC_LAYER 0x1E
+
 
 //SDL 플레이어 사이즈
 #define SCREEN_WIDTH 1920
 #define SCREEN_HEIGHT 1080
 #define SDL_USE 1
+
+#define H264 0	//H264 코덱전용, 사용안하면 DMB용도로~
 
 typedef enum {
 	PID_TYPE_NONE = 0,
@@ -69,6 +87,18 @@ public:
 };
 
 typedef enum {
+	CODEC_TYPE_NONE = 0,
+	CODEC_TYPE_MPEG2_VIDEO,
+	CODEC_TYPE_H264_VIDEO,
+	CODEC_TYPE_H265_VIDEO,
+	CODEC_TYPE_AC3_AUDIO,
+	CODEC_TYPE_EAC3_AUDIO,
+	CODEC_TYPE_AAC_AUDIO,
+	CODEC_TYPE_BSAC_AUDIO
+} CODEC_TYPE;
+
+
+typedef enum {
 	PES_TYPE_NONE = 0,
 	PES_TYPE_MPEG2_VIDEO,
 	PES_TYPE_H264_VIDEO,
@@ -76,7 +106,8 @@ typedef enum {
 	PES_TYPE_AC3_AUDIO,
 	PES_TYPE_EAC3_AUDIO,
 	PES_TYPE_AAC_AUDIO,
-	PES_TYPE_BSAC_AUDIO
+	PES_TYPE_MPEG_4_GENERIC_H264_VIDEO,
+	PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO
 } PES_TYPE;
 
 class PES_TABLE {
@@ -120,6 +151,9 @@ public:
 	unsigned short program_number = 0;
 	unsigned short elementary_pid = 0;
 	unsigned char stream_type = 0;
+	unsigned char codec_type = 0;
+	unsigned short es_id = 0;
+	std::string init_data;
 	std::string language;
 	unsigned char audio_type = 0;
 	unsigned int crc32 = 0;
