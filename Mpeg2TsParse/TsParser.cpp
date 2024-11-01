@@ -1369,6 +1369,7 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 				break;
 			}
 
+		#if 1
 			size_t newBufSize = initData.length();
 			unsigned char* newBuf = new unsigned char[newBufSize];
 
@@ -1376,29 +1377,59 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 				/*fwrite(initData.c_str(), 1, initData.length(), vfp);
 				fwrite(prefix, 1, sizeof(prefix), vfp);
 				fwrite(buf, 1, usLength, vfp);*/
-
+		
 				memcpy(newBuf, initData.c_str(), initData.length());
+		
 				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
 					(dts ? dts : pts) * 100 / 9,
 					static_cast<int>(initData.length()), newBuf, g_SessionID, buffer_time_us, 0, 0);
 
 				delete[] newBuf;
-
-
+		
+								
 				size_t newBufSize = sizeof(prefix) + usLength;
-				unsigned char* newBuf = new unsigned char[newBufSize];			
-				memcpy(newBuf, prefix, sizeof(prefix));
-				memcpy(newBuf + sizeof(prefix), buf, usLength);
-				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
-					(dts ? dts : pts) * 100 / 9,
-					static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
+				unsigned char* newBuf = new unsigned char[newBufSize];
+				if (newBuf == nullptr) {
+					printf("newBuf is nullptr\n");
+					return;
+				}
+				if ( (sizeof(prefix) + usLength) <= newBufSize) {
+					memcpy(newBuf, prefix, sizeof(prefix));
+					memcpy(newBuf + sizeof(prefix), buf, usLength);
+
+					g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
+						(dts ? dts : pts) * 100 / 9,
+						static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
+				}
+				else {
+					printf("buffer overrun 발생!! 콜백 처리 하지 않는다.");
+
+					return;
+				}
 
 				//printBinary("intit!", buf, usLength);
 				//printf("usLength  - 1[%d]\n", usLength);
-				//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);				
+				//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
 
 				delete[] newBuf;
 			}
+		#else
+			size_t newBufSize = initData.length() + sizeof(prefix) + usLength;
+			unsigned char* newBuf = new unsigned char[newBufSize];
+
+			//initdata 삽입
+			memcpy(newBuf, initData.c_str(), initData.length());
+
+			//시작 prefix삽입
+			memcpy(newBuf + initData.length(), prefix, sizeof(prefix));
+
+			//데이터 삽입
+			memcpy(newBuf + initData.length() + sizeof(prefix), buf, usLength);
+			//printBinary("esData", newBuf, newBufSize);
+			processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
+
+			delete[] newBuf;
+		#endif
 
 			break;
 		}
@@ -1406,12 +1437,16 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 
 			size_t newBufSize = sizeof(prefix) + usLength;
 			unsigned char* newBuf = new unsigned char[newBufSize];
+
 			memcpy(newBuf, prefix, sizeof(prefix));
 			memcpy(newBuf + sizeof(prefix), buf, usLength);
-
+		#if 1
 			g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
 				(dts ? dts : pts) * 100 / 9,
-				sizeof(newBuf), newBuf, g_SessionID, buffer_time_us, 0, 0);
+				static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
+		#else
+			processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
+		#endif
 
 			//printBinary("Data!", newBuf, usLength);
 			//printf("usLength  -2[%d]\n", usLength);
@@ -1431,19 +1466,22 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 
 void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts,
 	unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us) {
-	//abort();
+	//abort();	
 	
-#if 1
+#if 0
 	//printf("pts %llu\n", pts);
 	static FILE* vfp = NULL;
 	if (!vfp)
 	{
-		fopen_s(&vfp, "DMB1.ts", "wb");
+		int err = fopen_s(&vfp, "DMB2.ts", "wb");
+		if (err == 0) printf("success\n");
+		else printf("file error [%s]\n", strerror(errno));
 	}
 
 	if (vfp)
-	{
+	{		
 		fwrite(ucData, 1, usLength, vfp);
+		printf("fwrite\n");
 	}
 #endif
 
@@ -1480,7 +1518,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 						}
 					}
 					else {
-						printf("next_nal_unit_type(%d)\n", next_nal_unit_type);
+						//printf("next_nal_unit_type(%d)\n", next_nal_unit_type);
 						len = next - idx;
 						break;
 					}
@@ -1495,7 +1533,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 					start_code2 = (start_code2 << 8) | buf[i + 2];
 					start_code2 = (start_code2 << 8) | buf[i + 3];
 					//unsigned int start_code2 = (buf[i + 0] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
-				#if 1
+				#if 0
 					if (buf[i + 4] == 67) {
 						printf("0x67!!! -> [%d], %d, %d\n", 0x67 & 0x1f, (buf[i+4]), (buf[i+5]));
 						//printBinary("H264", ucData, usLength);
@@ -1516,8 +1554,7 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 					if (start_code2 == 0x00000001) {
 						printf("nal unit[0x%X]\n", nal_unit_type2);
 					}
-					if (start_code2 == 0x00000001 && (nal_unit_type2 == hvccParser->SPS_NUT || nal_unit_type2 == hvccParser->PPS_NUT)) {
-						printf("1111111111111111111111111111111111111111111");
+					if (start_code2 == 0x00000001 && (nal_unit_type2 == hvccParser->SPS_NUT || nal_unit_type2 == hvccParser->PPS_NUT)) {						
 						#if 0
 							printf("pts %llu\n", pts);
 							static FILE* vfp = NULL;
@@ -1547,9 +1584,10 @@ void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long 
 							next_start_code = (next_start_code << 8) | buf[j + 2];
 							next_start_code = (next_start_code << 8) | buf[j + 3];
 							unsigned char next_nal_unit_type = (buf[j + 4] & 0x1f);
-							printf("next_nal_unit_type[0x%x]\n", next_nal_unit_type);
+							//printf("next_nal_unit_type[0x%x]\n", next_nal_unit_type);
 							if (next_start_code == 0x00000001 && !(next_nal_unit_type == hvccParser->SPS_NUT || next_nal_unit_type == hvccParser->PPS_NUT)) {
 								param_len = j - i;
+								printf("1111111111111111111\n");
 								break;
 							}
 						}
