@@ -729,7 +729,7 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 				break;
 			case PES_TYPE_EAC3_AUDIO:
 				break;
-			case PES_TYPE_AC3_AUDIO:
+				case PES_TYPE_AC3_AUDIO:
 				processAc3AudioEsData(rf, serviceId, pts, data, len, buffer_time_us);
 				break;
 			case PES_TYPE_AAC_AUDIO: {
@@ -1380,102 +1380,20 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 	len -= 4;
 	buf += 4;
 
+	if ((buf[0] & 0x1f) == 5) {
+		g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
+			(dts ? dts : pts) * 100 / 9,
+			static_cast<int>(initData.length()), (unsigned char*)initData.c_str(), g_SessionID, buffer_time_us, 0, 0);
+	}
+
 	unsigned long long dtsUs = 1000000 * slHeader.decodingTimeStamp / slConfig.timeStampResolution;
 	unsigned long long ctsUs = 1000000 * slHeader.compositionTimeStamp / slConfig.timeStampResolution;
 	unsigned long long ptsUs = dtsUs + ctsUs;
-
 	const char prefix[] = { 0x0, 0x0, 0x0, 0x1 };
-
-	switch (buf[0] & 0x1f) {
-		case 5: {
-	#if 0
-			static FILE* vfp = NULL;
-			if (!vfp) {
-				vfp = fopen("video.es", "wb");
-				if (vfp) {
-					printf("fopen file success\n");
-				}
-				else {
-					printf("fopen fail [%s]\n", strerror(errno));
-				}
-			}
-	#endif
-			
-		#if 1
-			g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
-				(dts ? dts : pts) * 100 / 9,
-				static_cast<int>(initData.length()), (unsigned char*)initData.c_str(), g_SessionID, buffer_time_us, 0, 0);
-					
-			size_t newBufSize = sizeof(prefix) + usLength;
-			unsigned char* newBuf = new unsigned char[newBufSize];
-			if (newBuf == nullptr) {
-				printf("newBuf is nullptr\n");
-				return;
-			}
-			if ( (sizeof(prefix) + usLength) <= newBufSize) {
-				memcpy(newBuf, prefix, sizeof(prefix));
-				memcpy(newBuf + sizeof(prefix), buf, usLength);
-
-				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
-					(dts ? dts : pts) * 100 / 9,
-					static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
-			}
-			else {
-				printf("buffer overrun 발생!! 콜백 처리 하지 않는다.");
-
-				return;
-			}
-
-			//printBinary("intit!", buf, usLength);
-			//printf("usLength  - 1[%d]\n", usLength);
-			//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
-
-			delete[] newBuf;
-			
-		#else
-			size_t newBufSize = initData.length() + sizeof(prefix) + usLength;
-			unsigned char* newBuf = new unsigned char[newBufSize];
-
-			//initdata 삽입
-			memcpy(newBuf, initData.c_str(), initData.length());
-
-			//시작 prefix삽입
-			memcpy(newBuf + initData.length(), prefix, sizeof(prefix));
-
-			//데이터 삽입
-			memcpy(newBuf + initData.length() + sizeof(prefix), buf, usLength);
-			//printBinary("esData", newBuf, newBufSize);
-			processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
-
-			delete[] newBuf;
-		#endif
-
-			break;
-		}
-		default: {
-
-			size_t newBufSize = sizeof(prefix) + usLength;
-			unsigned char* newBuf = new unsigned char[newBufSize];
-
-			memcpy(newBuf, prefix, sizeof(prefix));
-			memcpy(newBuf + sizeof(prefix), buf, usLength);
-		#if 1
-			g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
-				(dts ? dts : pts) * 100 / 9,
-				static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
-		#else
-			processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
-		#endif
-
-			//printBinary("Data!", newBuf, usLength);
-			//printf("usLength  -2[%d]\n", usLength);
-			//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
-
-			delete[] newBuf;
-
-			break;
-		}
-	}
+	std::string auData = std::string((prefix), sizeof(prefix)) + std::string((const char*)buf, len);
+	g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
+		(dts ? dts : pts) * 100 / 9,
+		auData.length(), (unsigned char*)auData.c_str(), g_SessionID, buffer_time_us, 0, 0);
 }
 
 void TsParser::processH264VideoEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts,
