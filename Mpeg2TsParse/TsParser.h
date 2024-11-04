@@ -52,12 +52,15 @@ private:
 	void processSyncLayerDescriptorData(unsigned char* ucData, unsigned int usLength, unsigned short* esId);
 
 	void processMpeg4GenericEsData(int rf, int serviceId, unsigned long long dts, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
+	void processMpeg4GenericBsacEsData(int rf, int serviceId, unsigned long long pts, unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us);
 
+	unsigned int processSyncLayerPacketHeader(unsigned char* ucData, unsigned int usLength, SYNC_LAYER_CONFIG slConfig, SYNC_LAYER_PACKET_HEADER& retSlHeader);
+	void processSyncLayerConfigDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId);
+	void processInitialObjectDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId);
 	
 	int g_SessionID = -1;
 
 	void test();
-
 	std::thread parserThread;
 	void (*g_av_callback)(const char* codec, int TOI, int pos, unsigned long long decode_time_us,
 		unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2)	= nullptr;

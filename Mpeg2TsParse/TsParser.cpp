@@ -214,9 +214,6 @@ void TsParser::Init() {
 			if (table.codec_type != CODEC_TYPE_BSAC_AUDIO)
 				continue;
 
-			//if (std::to_string(table.elementary_pid) != GetSelectedAudioID())
-			//	continue;
-
 			unsigned short elementary_pid = table.elementary_pid;
 			bool bFind = false;
 			for (PID_TABLE& table2 : m_vec_pid_table) {
@@ -265,8 +262,11 @@ void TsParser::Init() {
 				PES_TABLE pes_table;
 				pes_table.rf = rf;
 				pes_table.pid = elementary_pid;
-				pes_table.type = (table.stream_type == TS_AUDIO_TYPE_AC3) ? PES_TYPE_AC3_AUDIO : PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO;
-					//(table.stream_type == TS_AUDIO_TYPE_EAC3) ? PES_TYPE_EAC3_AUDIO : PES_TYPE_AAC_AUDIO;
+
+				if (table.stream_type == TS_AUDIO_TYPE_AC3)	pes_table.type = PES_TYPE_AC3_AUDIO;
+				else if (table.stream_type == TS_AUDIO_TYPE_AAC) pes_table.type = PES_TYPE_AAC_AUDIO;
+				else pes_table.type = PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO;
+				
 				m_vec_pes_table.push_back(pes_table);
 
 				PID_TABLE pid_table;
@@ -398,15 +398,16 @@ void TsParser::Init() {
 									{
 									case PES_TYPE_H264_VIDEO:
 									case PES_TYPE_MPEG2_VIDEO:
-										std::cout << "PES_TYPE_MPEG2_VIDEO or PES_TYPE_H26" << std::endl;
+									case PES_TYPE_MPEG_4_GENERIC_H264_VIDEO:
+										std::cout << "PES_TYPE_MPEG2_VIDEO or PES_TYPE_H264 or PES_TYPE_MPEG_4_GENERIC_H264_VIDEO" << std::endl;
 										nodesVideo->reset();
 										break;
 									case PES_TYPE_AC3_AUDIO:
 									case PES_TYPE_AAC_AUDIO:
-										std::cout << "PES_TYPE_AC3_AUDIO | PES_TYPE_AAC_AUDIO" << std::endl;
+									case PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO:
+										std::cout << "PES_TYPE_AC3_AUDIO | PES_TYPE_AAC_AUDIO || PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO" << std::endl;
 										nodesAudio->reset();
-										break;							
-										
+										break;
 									default:
 										std::cout << "table2 type = " << table2.type << std::endl;
 										break;
@@ -491,7 +492,7 @@ void TsParser::Init() {
 			count = 0;
 		}
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
 	}//while
 }
 #pragma warning(pop)
@@ -714,14 +715,12 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 	for (PES_TABLE& table : m_vec_pes_table) {
 		if (rf == table.rf && pid == table.pid) {
 			switch (table.type) {
-			case PES_TYPE_H264_VIDEO:
-				//std::cout << "PES_TYPE_H264_VIDEO" << std::endl;
+			case PES_TYPE_H264_VIDEO:				
 				processH264VideoEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
 				break;
 			case PES_TYPE_MPEG2_VIDEO: {
 				std::cout << "PES_TYPE_MPEG2_VIDEO" << std::endl;
 				processMpeg2VideoEsData(rf, serviceId, dts, pts, data, len, buffer_time_us);
-
 				break;
 			}
 			case PES_TYPE_MPEG_4_GENERIC_H264_VIDEO:
@@ -736,9 +735,11 @@ void TsParser::processPesData(int rf, int serviceId, unsigned short pid, unsigne
 			case PES_TYPE_AAC_AUDIO: {
 				std::cout << "PES_TYPE_AAC_AUDIO || AC3" << std::endl;
 				processAacAudioEsData(rf, serviceId, dts ? dts : pts, data, len, buffer_time_us);
-
 				break;
 			}
+			case PES_TYPE_MPEG_4_GENERIC_BSAC_AUDIO:
+				processMpeg4GenericBsacEsData(rf, serviceId, dts ? dts : pts, data, len, buffer_time_us);
+				break;
 			default:
 				//std::cout << "table type = " << table.type << std::endl;
 				break;
@@ -863,15 +864,12 @@ void TsParser::processPatData(int rf, int serviceId, unsigned short pid, unsigne
 			program_table.source_id = 0;
 			program_table.available = false;
 			program_table.add_time_us = getTimeUs();
-			program_table.crc32 = crc32;
-			std::cout << "g_program_table push back" << std::endl;
+			program_table.crc32 = crc32;			
 			m_vec_program_table.push_back(program_table);
 
 			printf("Add program program_number %d\n", program_number);
 		}
 	}
-
-	//SendChannelMap(rf);	//slt callback처리. 임시 주석 처리 한다.
 }
 
 static void processContentAdvisoryDescriptorData(unsigned char* ucData, unsigned int usLength,
@@ -1218,10 +1216,17 @@ void TsParser::processPmtData(int rf, int serviceId, unsigned short pid, unsigne
 			unsigned char descriptor_tag = pp.get();
 			unsigned char descriptor_length = pp.get();
 
-			if (descriptor_tag == DESCRIPTOR_TAG_CONTENT_ADVISORY) {
-				std::vector<CONTENT_ADVISORY_TABLE> content_advisory_table;
-				processContentAdvisoryDescriptorData(pp.gets(descriptor_length),
-					descriptor_length, content_advisory_table);
+			if (descriptor_tag == DESCRIPTOR_TAG_INITIAL_OBJECT) {
+				pp.gets(2);
+				unsigned char descriptor_tag = pp.get();
+				unsigned char descriptor_length = pp.get();
+
+				if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_INITIAL_OBJECT) {
+					processInitialObjectDescriptorData(pp.gets(descriptor_length), descriptor_length, rf, serviceId);
+				}
+				else {
+					pp.gets(descriptor_length);
+				}
 			}
 			else {
 				pp.gets(descriptor_length);
@@ -1333,18 +1338,58 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 	unsigned char* ucData, unsigned int usLength, unsigned long long buffer_time_us) {
 
 	unsigned char* buf = ucData;
+	unsigned int len = usLength;
 	unsigned int idx = 0;
 
-	usLength -= 9;
-	buf += 9;
+	std::string initData;
+	SYNC_LAYER_CONFIG slConfig;
+	for (STREAM_TABLE& table : m_vec_stream_table) {
+		if (rf != table.rf)
+			continue;
+		if (serviceId != -1 && serviceId != table.program_number)
+			continue;
+		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+			continue;
+		if (table.codec_type != CODEC_TYPE_H264_VIDEO)
+			continue;
+		initData = table.init_data;
+		slConfig = table.sl_config;
+		break;
+	}
+
+	SYNC_LAYER_PACKET_HEADER slHeader;
+	unsigned int offset = processSyncLayerPacketHeader(buf, len, slConfig, slHeader);
+	if (len <= offset) {
+		//printf("Bad sync layer packet header offset %d from pes pid 0x%x type 0x%x\n", offset, table.pid, table.type);
+		printf("Bad sync layer packet header offset %d\n", offset);
+		return;
+	}
+
+	len -= offset;
+	buf += offset;
+
+	unsigned int nal_len = buf[0];
+	nal_len = (nal_len << 8) | buf[1];
+	nal_len = (nal_len << 8) | buf[2];
+	nal_len = (nal_len << 8) | buf[3];
+	if (nal_len != (len - 4)) {
+		//printf("Wrong nal length %d from pes pid 0x%x type 0x%x\n", nal_len, table.pid, table.type);
+		printf("Wrong nal length %d from pes pid\n", nal_len);
+		return;
+	}
+	len -= 4;
+	buf += 4;
+
+	unsigned long long dtsUs = 1000000 * slHeader.decodingTimeStamp / slConfig.timeStampResolution;
+	unsigned long long ctsUs = 1000000 * slHeader.compositionTimeStamp / slConfig.timeStampResolution;
+	unsigned long long ptsUs = dtsUs + ctsUs;
 
 	const char prefix[] = { 0x0, 0x0, 0x0, 0x1 };
-	static FILE* vfp = NULL;
-
-	//printf("value = [%d]\n", (buf[0] & 0x1f));
 
 	switch (buf[0] & 0x1f) {
 		case 5: {
+	#if 0
+			static FILE* vfp = NULL;
 			if (!vfp) {
 				vfp = fopen("video.es", "wb");
 				if (vfp) {
@@ -1354,65 +1399,39 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 					printf("fopen fail [%s]\n", strerror(errno));
 				}
 			}
-
-			std::string initData;
-			for (STREAM_TABLE& table : m_vec_stream_table) {
-				if (rf != table.rf)
-					continue;
-				if (serviceId != -1 && serviceId != table.program_number)
-					continue;
-				if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
-					continue;
-				if (table.codec_type != CODEC_TYPE_H264_VIDEO)
-					continue;
-				initData = table.init_data;
-				break;
-			}
-
+	#endif
+			
 		#if 1
-			size_t newBufSize = initData.length();
+			g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
+				(dts ? dts : pts) * 100 / 9,
+				static_cast<int>(initData.length()), (unsigned char*)initData.c_str(), g_SessionID, buffer_time_us, 0, 0);
+					
+			size_t newBufSize = sizeof(prefix) + usLength;
 			unsigned char* newBuf = new unsigned char[newBufSize];
-
-			if (vfp) {
-				/*fwrite(initData.c_str(), 1, initData.length(), vfp);
-				fwrite(prefix, 1, sizeof(prefix), vfp);
-				fwrite(buf, 1, usLength, vfp);*/
-		
-				memcpy(newBuf, initData.c_str(), initData.length());
-		
-				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 0,
-					(dts ? dts : pts) * 100 / 9,
-					static_cast<int>(initData.length()), newBuf, g_SessionID, buffer_time_us, 0, 0);
-
-				delete[] newBuf;
-		
-								
-				size_t newBufSize = sizeof(prefix) + usLength;
-				unsigned char* newBuf = new unsigned char[newBufSize];
-				if (newBuf == nullptr) {
-					printf("newBuf is nullptr\n");
-					return;
-				}
-				if ( (sizeof(prefix) + usLength) <= newBufSize) {
-					memcpy(newBuf, prefix, sizeof(prefix));
-					memcpy(newBuf + sizeof(prefix), buf, usLength);
-
-					g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
-						(dts ? dts : pts) * 100 / 9,
-						static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
-				}
-				else {
-					printf("buffer overrun 발생!! 콜백 처리 하지 않는다.");
-
-					return;
-				}
-
-				//printBinary("intit!", buf, usLength);
-				//printf("usLength  - 1[%d]\n", usLength);
-				//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
-
-				delete[] newBuf;
+			if (newBuf == nullptr) {
+				printf("newBuf is nullptr\n");
+				return;
 			}
+			if ( (sizeof(prefix) + usLength) <= newBufSize) {
+				memcpy(newBuf, prefix, sizeof(prefix));
+				memcpy(newBuf + sizeof(prefix), buf, usLength);
+
+				g_av_callback("h264", (int)((dts ? dts : pts) / 90000), 1,
+					(dts ? dts : pts) * 100 / 9,
+					static_cast<int>(newBufSize), newBuf, g_SessionID, buffer_time_us, 0, 0);
+			}
+			else {
+				printf("buffer overrun 발생!! 콜백 처리 하지 않는다.");
+
+				return;
+			}
+
+			//printBinary("intit!", buf, usLength);
+			//printf("usLength  - 1[%d]\n", usLength);
+			//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
+
+			delete[] newBuf;
+			
 		#else
 			size_t newBufSize = initData.length() + sizeof(prefix) + usLength;
 			unsigned char* newBuf = new unsigned char[newBufSize];
@@ -1451,11 +1470,6 @@ void TsParser::processMpeg4GenericEsData(int rf, int serviceId, unsigned long lo
 			//printBinary("Data!", newBuf, usLength);
 			//printf("usLength  -2[%d]\n", usLength);
 			//processH264VideoEsData(rf, serviceId, dts, pts, newBuf, newBufSize, buffer_time_us);
-
-			if (vfp) {
-				//fwrite(prefix, 1, sizeof(prefix), vfp);
-				//fwrite(buf, 1, usLength, vfp);
-			}
 
 			delete[] newBuf;
 
@@ -1853,6 +1867,62 @@ void process_cc_packet(unsigned char frame_type, unsigned char cc_type, unsigned
 }
 #endif
 
+void TsParser::processMpeg4GenericBsacEsData(int rf, int serviceId, unsigned long long pts, unsigned char* ucData, 
+	unsigned int usLength, unsigned long long buffer_time_us) {
+
+	unsigned char* buf = ucData;	
+	unsigned int len = usLength;
+	unsigned int idx = 0;
+
+	int samplingFrequency = 0;
+	int channelConfiguration = 0;
+	SYNC_LAYER_CONFIG slConfig;
+	for (STREAM_TABLE& table : m_vec_stream_table) {
+		if (rf != table.rf)
+			continue;
+		if (serviceId != -1 && serviceId != table.program_number)
+			continue;
+		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+			continue;
+		if (table.codec_type != CODEC_TYPE_BSAC_AUDIO)
+			continue;
+		samplingFrequency = table.sample_freq;
+		channelConfiguration = table.channel_conf;
+		slConfig = table.sl_config;
+		break;
+	}
+
+	SYNC_LAYER_PACKET_HEADER slHeader;
+	unsigned int offset = processSyncLayerPacketHeader(buf, len, slConfig, slHeader);
+	if (len <= offset) {
+		//printf("Bad sync layer packet header offset %d from pes pid 0x%x type 0x%x\n", offset, table.pid, table.type);
+		printf("Bad sync layer packet header offset %d\n", offset);
+		return;
+	}
+	len -= offset;
+	buf += offset;
+
+	printBinary("BSAC", buf, 16);	
+
+	unsigned long long dtsUs = 1000000 * slHeader.decodingTimeStamp / slConfig.timeStampResolution;
+	unsigned long long ctsUs = 1000000 * slHeader.compositionTimeStamp / slConfig.timeStampResolution;
+	unsigned long long ptsUs = dtsUs + ctsUs;
+#if 1
+	static FILE* afp = NULL;
+	if (!afp) {
+		afp = fopen("bsac_audio.es", "wb");
+	}
+
+	if (afp) {
+		fwrite(buf, 1, len, afp);
+	}
+#endif
+
+	if (g_av_callback) {
+		g_av_callback("bsac", ptsUs / 10000000, 1, dtsUs, len, buf, 0, 0, 0, 0);
+	}
+}
+
 void TsParser::processAacAudioEsData(int rf, int serviceId, unsigned long long pts, unsigned char* ucData,
 	unsigned int usLength, unsigned long long buffer_time_us) {
 	bool fragmented = nodesAudio->len() ? true : false;
@@ -2145,7 +2215,7 @@ void TsParser::processOdtData(int rf, int serviceId, unsigned short pid, unsigne
 	for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
 		unsigned char descriptor_tag = pp.get();
 		unsigned char descriptor_length = pp.get();
-		if (descriptor_tag == DESCRIPTOR_TAG_OBJECT) {
+		if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_OBJECT) {
 			processObjectDescriptorData(pp.gets(descriptor_length), descriptor_length, rf, serviceId);
 		}
 		else {
@@ -2167,7 +2237,7 @@ void TsParser::processObjectDescriptorData(unsigned char* ucData, unsigned int u
 		for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
 			unsigned char descriptor_tag = pp.get();
 			unsigned char descriptor_length = pp.get();
-			if (descriptor_tag == DESCRIPTOR_TAG_ELEMENTARY_STREAM) {				
+			if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_ELEMENTARY_STREAM) {
 				processElementaryStreamDescriptorData(pp.gets(descriptor_length), descriptor_length, rf, serviceId);
 			}
 			else {
@@ -2196,8 +2266,14 @@ void TsParser::processElementaryStreamDescriptorData(unsigned char* ucData, unsi
 
 	unsigned char descriptor_tag = bb.get();
 	unsigned char descriptor_length = bb.get();
-	if (descriptor_tag == DESCRIPTOR_TAG_DECODER_CONFIG) {
+	if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_DECODER_CONFIG) {
 		processDecoderConfigDescriptorData(bb.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
+	}
+
+	descriptor_tag = bb.get();
+	descriptor_length = bb.get();
+	if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_SYNC_LAYER_CONFIG) {
+		processSyncLayerConfigDescriptorData(bb.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
 	}
 }
 
@@ -2213,12 +2289,11 @@ void TsParser::processDecoderConfigDescriptorData(unsigned char* ucData, unsigne
 	for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
 		unsigned char descriptor_tag = pp.get();
 		unsigned char descriptor_length = pp.get();
-		if (descriptor_tag == DESCRIPTOR_TAG_DECODER_SPECIFIC_INFO) {
-			if (streamType == 0x04) {
-				//printf("processH264InfoData\n");
+		if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_DECODER_SPECIFIC_INFO) {
+			if (objectTypeIndicator == MPEG_4_OBJECT_TYPE_VISUAL_ISO_14496_10) {
 				processH264InfoData(pp.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
 			}
-			else if (streamType == 0x05) {
+			else if (objectTypeIndicator == MPEG_4_OBJECT_TYPE_AUDIO_ISO_14496_3) {
 				processBsacInfoData(pp.gets(descriptor_length), descriptor_length, rf, serviceId, esId);
 			}
 			else {
@@ -2272,9 +2347,87 @@ void TsParser::processH264InfoData(unsigned char* ucData, unsigned int usLength,
 }
 
 void TsParser::processBsacInfoData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId) {
-	CByteBuffer bb(ucData, usLength);
-	bb.gets(5);
-	std::string initData;
+	const static unsigned int samplingFrequencyTable[13] = { 96000, 88200, 64000, 48000, 44100, 32000, 24000,
+															  22050, 16000, 12000, 11025, 8000, 7350 };
+	unsigned int samplingFrequency = 0;
+	CBitBuffer bb(ucData);
+	unsigned char audioObjectType = bb.get(5);
+	if (audioObjectType == 31) {
+		audioObjectType = 32 + bb.get(6);
+	}
+	unsigned char samplingFrequencyIndex = bb.get(4);
+	if (samplingFrequencyIndex == 0x0f) {
+		samplingFrequency = bb.get(24);
+	}
+	else if (samplingFrequencyIndex < 13) {
+		samplingFrequency = samplingFrequencyTable[samplingFrequencyIndex];
+	}
+	unsigned char channelConfiguration = bb.get(4);
+
+	unsigned char extensionAudioObjectType = 0;
+	if (audioObjectType == 5 || audioObjectType == 29) {
+		extensionAudioObjectType = 5;
+	}
+	else {
+		extensionAudioObjectType = 0;
+	}
+
+	switch (audioObjectType) {
+	case 22: {
+		unsigned char frameLengthFlag = bb.get(1);
+		unsigned char dependsOnCoreCoder = bb.get(1);
+		if (dependsOnCoreCoder) {
+			unsigned int coreCoderDelay = bb.get(14);
+		}
+		unsigned char extensionFlag = bb.get(1);
+
+		if (!channelConfiguration) {
+			// to do
+		}
+		if ((audioObjectType == 6) || (audioObjectType == 20)) {
+			unsigned char layerNr = bb.get(3);
+		}
+		if (extensionFlag) {
+			if (audioObjectType == 22) {
+				unsigned char numOfSubFrame = bb.get(5);
+				unsigned short layer_length = bb.get(11);
+			}
+			if (audioObjectType == 17 || audioObjectType == 19 || audioObjectType == 20 || audioObjectType == 23) {
+				unsigned char aacSectionDataResilienceFlag = bb.get(1);
+				unsigned char aacScalefactorDataResilienceFlag = bb.get(1);
+				unsigned char aacSpectralDataResilienceFlag = bb.get(1);
+			}
+			unsigned char extensionFlag3 = bb.get(1);
+			if (extensionFlag3) {
+				/* tbd in version 3 */
+			}
+		}
+
+		break;
+	}
+
+	default:
+		break;
+	}
+
+	switch (audioObjectType) {
+	case 22: {
+		unsigned char epConfig = bb.get(2);
+		if (epConfig == 2 || epConfig == 3) {
+		}
+		if (epConfig == 3) {
+			unsigned char directMapping = bb.get(1);
+			if (!directMapping) {
+				/* tbd */
+			}
+		}
+
+		break;
+	}
+
+	default:
+		break;
+	}
 
 	for (STREAM_TABLE& table : m_vec_stream_table) {
 		if (rf != table.rf)
@@ -2287,13 +2440,201 @@ void TsParser::processBsacInfoData(unsigned char* ucData, unsigned int usLength,
 			continue;
 		if (table.codec_type != CODEC_TYPE_BSAC_AUDIO) {
 			table.codec_type = CODEC_TYPE_BSAC_AUDIO;
-			table.init_data = initData;
+			table.sample_freq = samplingFrequency;
+			table.channel_conf = channelConfiguration;
 
 			printf("Add audio info to elementary_pid 0x%x es_id 0x%x\n", table.elementary_pid, table.es_id);
 		}
 		break;
 	}
-
-	//printBinary("BSAC-init", ucData, usLength);
 }
+
+unsigned int TsParser::processSyncLayerPacketHeader(unsigned char* ucData, unsigned int usLength, SYNC_LAYER_CONFIG slConfig,
+	SYNC_LAYER_PACKET_HEADER& retSlHeader) {
+	CBitBuffer bb(ucData);
+	unsigned int offset = 0;
+	unsigned char accessUnitStartFlag = 0;
+	unsigned char accessUnitEndFlag = 0;
+	unsigned char OCRflag = 0;
+	unsigned char idleFlag = 0;
+	unsigned char paddingFlag = 0;
+	unsigned char paddingBits = 0;
+	unsigned long long packetSequenceNumber = 0;
+	unsigned char DegPrioflag = 0;
+	unsigned long long degradationPriority = 0;
+	unsigned long long objectClockReference = 0;
+	unsigned char randomAccessPointFlag = 0;
+	unsigned long long AU_sequenceNumber = 0;
+	unsigned char decodingTimeStampFlag = 0;
+	unsigned char compositionTimeStampFlag = 0;
+	unsigned char instantBitrateFlag = 0;
+	unsigned long long decodingTimeStamp = 0;
+	unsigned long long compositionTimeStamp = 0;
+	unsigned long long accessUnitLength = 0;
+	unsigned long long instantBitrate = 0;
+
+	if (slConfig.useAccessUnitStartFlag) {
+		accessUnitStartFlag = bb.get(1);
+		offset += 1;
+	}
+	if (slConfig.useAccessUnitEndFlag) {
+		accessUnitEndFlag = bb.get(1);
+		offset += 1;
+	}
+	if (slConfig.OCRLength > 0) {
+		OCRflag = bb.get(1);
+		offset += 1;
+	}
+	if (slConfig.useIdleFlag) {
+		idleFlag = bb.get(1);
+		offset += 1;
+	}
+	if (slConfig.usePaddingFlag) {
+		paddingFlag = bb.get(1);
+		offset += 1;
+	}
+	if (paddingFlag) {
+		paddingBits = bb.get(3);
+		offset += 3;
+	}
+	if (!idleFlag && (!paddingFlag || paddingBits != 0)) {
+		if (slConfig.packetSeqNumLength > 0) {
+			packetSequenceNumber = bb.get(slConfig.packetSeqNumLength);
+			offset += slConfig.packetSeqNumLength;
+		}
+		if (slConfig.degradationPriorityLength > 0) {
+			DegPrioflag = bb.get(1);  offset += 1;
+		}
+		if (DegPrioflag) {
+			degradationPriority = bb.get(slConfig.degradationPriorityLength);
+			offset += slConfig.degradationPriorityLength;
+		}
+		if (OCRflag) {
+			objectClockReference = bb.get(slConfig.OCRLength);
+			offset += slConfig.OCRLength;
+		}
+		if (accessUnitStartFlag) {
+			if (slConfig.useRandomAccessPointFlag) {
+				randomAccessPointFlag = bb.get(1);
+				offset += 1;
+			}
+			if (slConfig.AU_seqNumLength > 0) {
+				AU_sequenceNumber = bb.get(slConfig.AU_seqNumLength);
+				offset += slConfig.AU_seqNumLength;
+			}
+			if (slConfig.useTimeStampsFlag) {
+				decodingTimeStampFlag = bb.get(1);
+				offset += 1;
+				compositionTimeStampFlag = bb.get(1);
+				offset += 1;
+			}
+		}
+		if (slConfig.instantBitrateLength > 0) {
+			instantBitrateFlag = bb.get(1);
+			offset += 1;
+		}
+		if (decodingTimeStampFlag) {
+			decodingTimeStamp = bb.get(slConfig.timeStampLength);
+			offset += slConfig.timeStampLength;
+		}
+		if (compositionTimeStampFlag) {
+			compositionTimeStamp = bb.get(slConfig.timeStampLength);
+			offset += slConfig.timeStampLength;
+		}
+		if (slConfig.AU_Length > 0) {
+			accessUnitLength = bb.get(slConfig.AU_Length);
+			offset += slConfig.AU_Length;
+		}
+		if (instantBitrateFlag) {
+			instantBitrate = bb.get(slConfig.instantBitrateLength);
+			offset += slConfig.instantBitrateLength;
+		}
+	}
+
+	retSlHeader.objectClockReference = objectClockReference;
+	retSlHeader.decodingTimeStamp = decodingTimeStamp;
+	retSlHeader.compositionTimeStamp = compositionTimeStamp;
+
+	return (offset + 7) >> 3;
+}
+
+void TsParser::processSyncLayerConfigDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId, unsigned short esId) {
+	CBitBuffer bb(ucData);
+	unsigned char predefined = bb.get(8);
+	SYNC_LAYER_CONFIG slConfig;
+	if (predefined == 0) {
+		slConfig.useAccessUnitStartFlag = bb.get(1);
+		slConfig.useAccessUnitEndFlag = bb.get(1);
+		slConfig.useRandomAccessPointFlag = bb.get(1);
+		slConfig.hasRandomAccessUnitsOnlyFlag = bb.get(1);
+		slConfig.usePaddingFlag = bb.get(1);
+		slConfig.useTimeStampsFlag = bb.get(1);
+		slConfig.useIdleFlag = bb.get(1);
+		slConfig.durationFlag = bb.get(1);
+		slConfig.timeStampResolution = bb.get(32);
+		slConfig.OCRResolution = bb.get(32);
+		slConfig.timeStampLength = bb.get(8);
+		slConfig.OCRLength = bb.get(8);
+		slConfig.AU_Length = bb.get(8);
+		slConfig.instantBitrateLength = bb.get(8);
+		slConfig.degradationPriorityLength = bb.get(4);
+		slConfig.AU_seqNumLength = bb.get(5);
+		slConfig.packetSeqNumLength = bb.get(5);
+	}
+	else if (predefined == 1) {
+		slConfig.timeStampResolution = 1000;
+		slConfig.timeStampLength = 32;
+	}
+	else if (predefined == 2) {
+		slConfig.useTimeStampsFlag = 1;
+	}
+
+	if (slConfig.durationFlag) {
+		slConfig.timeScale = bb.get(32);
+		slConfig.accessUnitDuration = bb.get(16);
+		slConfig.compositionUnitDuration = bb.get(16);
+	}
+
+	if (!slConfig.useTimeStampsFlag) {
+		slConfig.startDecodingTimeStamp = bb.get(slConfig.timeStampLength);
+		slConfig.startCompositionTimeStamp = bb.get(slConfig.timeStampLength);
+	}
+
+	for (STREAM_TABLE& table : m_vec_stream_table) {
+		if (rf != table.rf)
+			continue;
+		if (serviceId != -1 && serviceId != table.program_number)
+			continue;
+		if (table.stream_type != STREAM_TYPE_MPEG_4_GENERIC)
+			continue;
+		if (table.es_id != esId)
+			continue;
+		if (memcmp(&table.sl_config, &slConfig, sizeof(slConfig))) {
+			table.sl_config = slConfig;
+
+			printf("Add sync layer config to elementary_pid 0x%x es_id 0x%x\n", table.elementary_pid, table.es_id);
+		}
+		break;
+	}
+}
+
+void TsParser::processInitialObjectDescriptorData(unsigned char* ucData, unsigned int usLength, int rf, int serviceId) {
+	CByteBuffer bb(ucData, usLength);
+	unsigned short b = bb.get2();
+	unsigned char urlFlag = (b >> 5) & 0x01;
+	if (urlFlag == 0) {
+		bb.gets(5);
+		for (CByteBuffer pp(bb.gets(bb.remain()), bb.remain()); pp.remain();) {
+			unsigned char descriptor_tag = pp.get();
+			unsigned char descriptor_length = pp.get();
+			if (descriptor_tag == DESCRIPTOR_TAG_MPEG_4_ELEMENTARY_STREAM) {
+				processElementaryStreamDescriptorData(pp.gets(descriptor_length), descriptor_length, rf, serviceId);
+			}
+			else {
+				pp.gets(descriptor_length);
+			}
+		}
+	}
+}
+
 #pragma warning(pop)

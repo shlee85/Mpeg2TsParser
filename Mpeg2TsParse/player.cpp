@@ -1499,9 +1499,9 @@ void Player::avPlayerSDL(unsigned char* data, int size) {
 
 void Player::AT3APP_AvCallbackSub(const char* codec, int TOI, int pos, unsigned long long decode_time_us, unsigned int data_length, unsigned char* data, int SessionID, unsigned long long minBufferTime, int param1, int param2)
 {
-	printf("[%s] %s %d %d %llu %u\n", __func__, codec, TOI, pos, decode_time_us, data_length);
+	//printf("[%s] %s %d %d %llu %u\n", __func__, codec, TOI, pos, decode_time_us, data_length);
 	g_SessionID = SessionID;
-	//decode_time_us += 1;	//DMB테스트시 강제로 동작 시킬 때는 1로 변경 해야 함.
+	decode_time_us += 1;	//DMB테스트시 강제로 동작 시킬 때는 1로 변경 해야 함.
 	static unsigned long long first_video_decode_time_us = 0, first_decode_time_us = 0, first_system_time_us = 0, offset_time_us = 0;
 	if (strcmp(codec, "aac") == 0 || strcmp(codec, "ac3") == 0 || strcmp(codec, "mpegh") == 0 || strcmp(codec, "mp2") == 0 || strcmp(codec, "hevc") == 0 || strcmp(codec, "mpeg2") == 0
 		|| strcmp(codec, "h264") == 0)
